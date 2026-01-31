@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Check, Plus, ChevronLeft, Flame, BarChart3, Settings, Home, Download, Upload, X } from 'lucide-react';
+import { Check, Plus, ChevronLeft, Flame, BarChart3, Settings, Home, Download, Upload, X, Trash2 } from 'lucide-react';
 
 // ==================== TYPES ====================
 
@@ -30,6 +30,7 @@ interface AppSettings {
   notificationsEnabled: boolean;
   dailySummaryInterval: 7 | 15 | 30 | 45 | 60 | 90;
   thresholdAlertsEnabled: boolean;
+  hasCompletedOnboarding: boolean;
 }
 
 interface AppState {
@@ -53,23 +54,29 @@ interface DataExport {
 }
 
 type Screen = 'home' | 'friend-detail' | 'insights' | 'settings';
-type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | null;
+type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | 'delete-confirm' | null;
 
 // ==================== CONSTANTS ====================
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '2.0.0';
 
-// Soft, calm color palette
+// New warm color palette
 const COLORS = {
-  fresh: '#10B981',      // Emerald - recently connected
-  good: '#34D399',       // Light emerald - on track
-  approaching: '#FBBF24', // Amber - getting close to cadence
-  overdue: '#F97316',    // Soft orange - past cadence (not red!)
-  text: {
-    primary: '#1F2937',
-    secondary: '#6B7280',
-    muted: '#9CA3AF',
-  }
+  amber: '#F9A825',
+  amberLight: '#FFCA28',
+  amberDark: '#F57F17',
+  teal: '#26A69A',
+  tealLight: '#4DB6AC',
+  tealDark: '#00897B',
+  fresh: '#81C784',
+  approaching: '#FFCC80',
+  attention: '#FF8A65',
+  cream: '#FFFBF5',
+  textPrimary: '#3D3D3D',
+  textSecondary: '#757575',
+  textMuted: '#9E9E9E',
+  darkBg: '#1C1917',
+  darkCard: '#292524',
 };
 
 // ==================== UTILITY FUNCTIONS ====================
@@ -78,27 +85,23 @@ const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9
 
 const calculateElapsed = (lastMeeting: number | null): { days: number; hours: number; minutes: number; total: number } => {
   if (!lastMeeting) return { days: 0, hours: 0, minutes: 0, total: 0 };
-  
   const elapsed = Date.now() - lastMeeting;
   const totalMinutes = Math.floor(elapsed / 60000);
   const days = Math.floor(elapsed / 86400000);
   const hours = Math.floor((elapsed % 86400000) / 3600000);
   const minutes = Math.floor((elapsed % 3600000) / 60000);
-  
   return { days, hours, minutes, total: totalMinutes };
 };
 
 const getTimerColor = (lastMeeting: number | null, cadence: number): string => {
   if (!lastMeeting) return COLORS.fresh;
-  
   const elapsed = Date.now() - lastMeeting;
   const days = elapsed / 86400000;
   const percentage = (days / cadence) * 100;
-  
   if (percentage < 50) return COLORS.fresh;
-  if (percentage < 80) return COLORS.good;
+  if (percentage < 80) return COLORS.fresh;
   if (percentage < 100) return COLORS.approaching;
-  return COLORS.overdue;
+  return COLORS.attention;
 };
 
 const getDaysUntilDue = (lastMeeting: number | null, cadence: number): number => {
@@ -110,47 +113,41 @@ const getDaysUntilDue = (lastMeeting: number | null, cadence: number): number =>
 
 const calculateHealthScore = (friend: Friend, meetings: Meeting[]): number => {
   if (friend.totalMeetings < 2) return 50;
-  
   const friendMeetings = meetings
     .filter(m => m.friendId === friend.id)
     .sort((a, b) => a.timestamp - b.timestamp)
     .slice(-10);
-  
   if (friendMeetings.length < 2) return 50;
-  
   const gaps = friendMeetings.slice(1).map((m, i) => 
     Math.floor((m.timestamp - friendMeetings[i].timestamp) / 86400000)
   );
-  
   const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
   const variance = gaps.reduce((sum, gap) => sum + Math.pow(gap - avgGap, 2), 0) / gaps.length;
   const consistency = Math.max(0, 100 - (variance / Math.max(avgGap, 1)) * 50);
-  
   const streakStability = Math.min(friend.streakCount * 3, 30);
   const gapScore = Math.max(0, 100 - (Math.abs(avgGap - friend.cadenceDays) / friend.cadenceDays) * 100);
   const multiplierBonus = (friend.multiplier - 1) * 10;
-  
   return Math.round((consistency * 0.4) + (streakStability * 0.3) + (gapScore * 0.2) + multiplierBonus);
+};
+
+const getGreeting = (): string => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
 };
 
 // ==================== CUSTOM HOOKS ====================
 
-// Live timer hook - updates every minute
 const useLiveTimer = () => {
   const [tick, setTick] = useState(0);
-  
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTick(t => t + 1);
-    }, 60000); // Update every minute
-    
+    const interval = setInterval(() => setTick(t => t + 1), 60000);
     return () => clearInterval(interval);
   }, []);
-  
   return tick;
 };
 
-// Dark mode hook
 const useDarkMode = (theme: 'auto' | 'light' | 'dark') => {
   useEffect(() => {
     const updateTheme = () => {
@@ -161,9 +158,7 @@ const useDarkMode = (theme: 'auto' | 'light' | 'dark') => {
         document.documentElement.classList.toggle('dark', theme === 'dark');
       }
     };
-
     updateTheme();
-
     if (theme === 'auto') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       mediaQuery.addEventListener('change', updateTheme);
@@ -174,7 +169,12 @@ const useDarkMode = (theme: 'auto' | 'light' | 'dark') => {
 
 // ==================== COMPONENTS ====================
 
-// Toast notification component
+const WaveDivider = ({ className = '' }: { className?: string }) => (
+  <svg viewBox="0 0 1440 120" className={`w-full ${className}`} preserveAspectRatio="none">
+    <path fill="currentColor" d="M0,64 C288,89 432,24 720,49 C1008,74 1152,119 1440,99 L1440,120 L0,120 Z"/>
+  </svg>
+);
+
 const ToastContainer = ({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) => {
   useEffect(() => {
     toasts.forEach(toast => {
@@ -183,78 +183,60 @@ const ToastContainer = ({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
     });
   }, [toasts, onDismiss]);
 
-  const getToastStyles = (type: Toast['type']) => {
-    switch (type) {
-      case 'success': return 'bg-emerald-600';
-      case 'warning': return 'bg-amber-500';
-      case 'error': return 'bg-red-500';
-      case 'info': return 'bg-blue-500';
-    }
-  };
-
   return (
-    <div className="fixed top-4 left-0 right-0 z-50 flex flex-col items-center gap-2 pointer-events-none px-4">
+    <div className="fixed top-14 left-0 right-0 z-50 flex flex-col items-center gap-2 pointer-events-none px-4 safe-area-top">
       {toasts.map(toast => (
         <div
           key={toast.id}
-          className={`${getToastStyles(toast.type)} text-white px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3 pointer-events-auto transform transition-all duration-300 ease-out animate-slide-down`}
+          className="text-white px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3 pointer-events-auto animate-slide-down"
+          style={{ backgroundColor: toast.type === 'error' ? COLORS.attention : COLORS.teal }}
           onClick={() => onDismiss(toast.id)}
         >
           <Check className="w-5 h-5 flex-shrink-0" />
-          <span className="text-sm font-medium">{toast.message}</span>
+          <span className="text-sm font-medium font-nunito">{toast.message}</span>
         </div>
       ))}
     </div>
   );
 };
 
-// Timer display component - the hero element
-const TimerDisplay = ({ lastMeeting, cadence }: { lastMeeting: number | null; cadence: number }) => {
-  useLiveTimer(); // Subscribe to timer updates
-  
+const TimerDisplay = ({ lastMeeting, cadence, size = 'normal' }: { lastMeeting: number | null; cadence: number; size?: 'normal' | 'large' }) => {
+  useLiveTimer();
   const elapsed = calculateElapsed(lastMeeting);
   const color = getTimerColor(lastMeeting, cadence);
+  const textSize = size === 'large' ? 'text-5xl' : 'text-4xl';
+  const unitSize = size === 'large' ? 'text-xl' : 'text-lg';
   
   if (!lastMeeting) {
     return (
       <div className="text-center py-2">
-        <div className="text-3xl font-light tracking-tight text-gray-400 dark:text-gray-500 transition-colors duration-500">
+        <div className={`${textSize} font-light tracking-tight text-gray-400 dark:text-gray-500 font-nunito`}>
           No meetings yet
         </div>
-        <div className="text-sm text-gray-400 dark:text-gray-500 mt-1">
-          ready when you are
-        </div>
+        <div className="text-sm text-gray-400 dark:text-gray-500 mt-1 font-nunito">ready when you are</div>
       </div>
     );
   }
   
   return (
     <div className="text-center py-2">
-      <div 
-        className="font-light tracking-tight transition-colors duration-700 ease-in-out"
-        style={{ color }}
-      >
-        <span className="text-4xl tabular-nums">{elapsed.days}</span>
-        <span className="text-lg text-gray-400 dark:text-gray-500 mx-1">d</span>
-        <span className="text-4xl tabular-nums">{elapsed.hours}</span>
-        <span className="text-lg text-gray-400 dark:text-gray-500 mx-1">h</span>
-        <span className="text-4xl tabular-nums">{elapsed.minutes}</span>
-        <span className="text-lg text-gray-400 dark:text-gray-500 ml-1">m</span>
+      <div className="font-light tracking-tight transition-colors duration-700 ease-in-out font-nunito" style={{ color }}>
+        <span className={`${textSize} tabular-nums`}>{elapsed.days}</span>
+        <span className={`${unitSize} text-gray-400 dark:text-gray-500 mx-1`}>d</span>
+        <span className={`${textSize} tabular-nums`}>{elapsed.hours}</span>
+        <span className={`${unitSize} text-gray-400 dark:text-gray-500 mx-1`}>h</span>
+        <span className={`${textSize} tabular-nums`}>{elapsed.minutes}</span>
+        <span className={`${unitSize} text-gray-400 dark:text-gray-500 ml-1`}>m</span>
       </div>
-      <div className="text-sm text-gray-400 dark:text-gray-500 mt-1 transition-opacity duration-300">
-        since you connected
-      </div>
+      <div className="text-sm text-gray-400 dark:text-gray-500 mt-1 font-nunito">since you connected</div>
     </div>
   );
 };
 
-// Progress bar component
 const ProgressBar = ({ lastMeeting, cadence }: { lastMeeting: number | null; cadence: number }) => {
   useLiveTimer();
-  
   const color = getTimerColor(lastMeeting, cadence);
   const daysUntil = getDaysUntilDue(lastMeeting, cadence);
-  
   let percentage = 0;
   if (lastMeeting) {
     const elapsed = Date.now() - lastMeeting;
@@ -264,87 +246,51 @@ const ProgressBar = ({ lastMeeting, cadence }: { lastMeeting: number | null; cad
   
   return (
     <div className="mt-4">
-      <div className="h-1.5 bg-gray-100 dark:bg-gray-700/50 rounded-full overflow-hidden">
-        <div 
-          className="h-full rounded-full transition-all duration-700 ease-out"
-          style={{ 
-            width: `${percentage}%`,
-            backgroundColor: color
-          }}
-        />
+      <div className="h-2 bg-gray-100 dark:bg-gray-700/50 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${percentage}%`, backgroundColor: color }}/>
       </div>
-      <div className="flex justify-between mt-2 text-xs text-gray-400 dark:text-gray-500">
+      <div className="flex justify-between mt-2 text-xs text-gray-400 dark:text-gray-500 font-nunito">
         <span className="tabular-nums">{Math.round(percentage)}% of cycle</span>
-        <span className="tabular-nums">
-          {daysUntil > 0 ? `${daysUntil}d left` : 'due for a catch-up'}
-        </span>
+        <span className="tabular-nums">{daysUntil > 0 ? `${daysUntil}d left` : 'ready for a catch-up'}</span>
       </div>
     </div>
   );
 };
 
-// Friend card component - timer-first design
-const FriendCard = ({ 
-  friend, 
-  meetings, 
-  onClick 
-}: { 
-  friend: Friend; 
-  meetings: Meeting[]; 
-  onClick: () => void 
-}) => {
+const FriendCard = ({ friend, meetings, onClick }: { friend: Friend; meetings: Meeting[]; onClick: () => void }) => {
   const healthScore = calculateHealthScore(friend, meetings);
   
   return (
     <div 
       onClick={onClick}
-      className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-5 mb-3 cursor-pointer 
-                 transition-all duration-300 ease-out
-                 hover:shadow-lg hover:shadow-gray-200/50 dark:hover:shadow-gray-900/50
-                 active:scale-[0.98] active:shadow-md"
+      className="rounded-3xl p-5 mb-4 cursor-pointer transition-all duration-300 ease-out hover:shadow-lg active:scale-[0.98]"
+      style={{ backgroundColor: 'var(--card-bg)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}
     >
-      {/* Timer - The Hero */}
       <TimerDisplay lastMeeting={friend.lastMeetingDate} cadence={friend.cadenceDays} />
-      
-      {/* Subtle Divider */}
       <div className="border-t border-gray-100 dark:border-gray-700/50 my-4" />
-      
-      {/* Friend Info */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 
-                          flex items-center justify-center text-white font-semibold text-sm
-                          shadow-md shadow-purple-500/20">
+          <div 
+            className="w-11 h-11 rounded-full flex items-center justify-center text-white font-semibold text-sm font-nunito"
+            style={{ background: `linear-gradient(135deg, ${COLORS.teal} 0%, ${COLORS.tealDark} 100%)`, boxShadow: `0 4px 12px ${COLORS.teal}40` }}
+          >
             {friend.name.charAt(0).toUpperCase()}
           </div>
           <div>
-            <div className="font-semibold text-gray-900 dark:text-gray-100">{friend.name}</div>
-            <div className="text-xs text-gray-400 dark:text-gray-500">
-              {friend.relationshipTier} · every {friend.cadenceDays}d
-            </div>
+            <div className="font-semibold text-gray-800 dark:text-gray-100 font-nunito">{friend.name}</div>
+            <div className="text-xs text-gray-400 dark:text-gray-500 font-nunito">{friend.relationshipTier} · every {friend.cadenceDays}d</div>
           </div>
         </div>
-        
         <div className="flex items-center gap-3">
-          {/* Health Score - Subtle */}
-          <div className="text-xs text-gray-400 dark:text-gray-500">
-            {healthScore}
-          </div>
-          
-          {/* Streak Badge */}
+          <div className="text-xs text-gray-400 dark:text-gray-500 font-nunito tabular-nums">{healthScore}</div>
           {friend.streakCount > 0 && (
-            <div className="flex items-center gap-1 bg-orange-50 dark:bg-orange-900/20 px-2.5 py-1 rounded-full
-                            transition-transform duration-300 hover:scale-105">
-              <Flame className="w-3.5 h-3.5 text-orange-400" />
-              <span className="text-xs font-semibold text-orange-500 dark:text-orange-400 tabular-nums">
-                {friend.streakCount}
-              </span>
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full" style={{ backgroundColor: `${COLORS.approaching}30` }}>
+              <Flame className="w-3.5 h-3.5" style={{ color: COLORS.attention }} />
+              <span className="text-xs font-semibold tabular-nums font-nunito" style={{ color: COLORS.attention }}>{friend.streakCount}</span>
             </div>
           )}
         </div>
       </div>
-      
-      {/* Progress Bar */}
       <ProgressBar lastMeeting={friend.lastMeetingDate} cadence={friend.cadenceDays} />
     </div>
   );
@@ -352,167 +298,75 @@ const FriendCard = ({
 
 // ==================== MODALS ====================
 
-const AddEditFriendModal = ({ 
-  friend, 
-  onClose, 
-  onSave, 
-  friendCount 
-}: { 
-  friend?: Friend; 
-  onClose: () => void; 
-  onSave: (data: Partial<Friend>) => void; 
-  friendCount: number;
-}) => {
+const AddEditFriendModal = ({ friend, onClose, onSave, friendCount }: { friend?: Friend; onClose: () => void; onSave: (data: Partial<Friend>) => void; friendCount: number }) => {
   const [name, setName] = useState(friend?.name || '');
   const [tier, setTier] = useState<'close' | 'casual'>(friend?.relationshipTier || 'close');
   const [cadence, setCadence] = useState(friend?.cadenceDays || 14);
   const [error, setError] = useState('');
+  const presets = [7, 14, 21, 30, 60, 90];
 
   const handleSave = () => {
-    if (!name.trim()) {
-      setError('Name is required');
-      return;
-    }
-    if (!friend && friendCount >= 10) {
-      setError('Friend limit reached (10 max)');
-      return;
-    }
+    if (!name.trim()) { setError('Name is required'); return; }
+    if (!friend && friendCount >= 10) { setError('Friend limit reached (10 max)'); return; }
     onSave({ name: name.trim(), relationshipTier: tier, cadenceDays: cadence });
   };
 
-  const presets = [7, 14, 21, 30, 60, 90];
-
   return (
     <>
-      <div 
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity duration-300" 
-        onClick={onClose}
-      />
-      <div className="fixed inset-x-0 bottom-0 z-50 bg-white dark:bg-gray-800 rounded-t-3xl 
-                      max-h-[90vh] overflow-auto animate-slide-up">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 pb-2">
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={onClose}/>
+      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl max-h-[90vh] overflow-auto animate-slide-up safe-area-bottom" style={{ backgroundColor: 'var(--card-bg)' }}>
+        <div className="sticky top-0 pb-2" style={{ backgroundColor: 'var(--card-bg)' }}>
           <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-600 rounded-full mx-auto mt-3 mb-4" />
           <div className="flex items-center justify-between px-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              {friend ? 'Edit Friend' : 'Add Friend'}
-            </h2>
-            <button 
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-            >
+            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 font-nunito">{friend ? 'Edit Friend' : 'Add Friend'}</h2>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
               <X className="w-5 h-5 text-gray-400" />
             </button>
           </div>
         </div>
-
         <div className="px-6 pb-8 space-y-6">
-          {/* Name Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
-              Name
-            </label>
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 font-nunito">Name</label>
             <input
-              type="text"
-              value={name}
-              onChange={(e) => { setName(e.target.value); setError(''); }}
-              placeholder="Friend's name"
-              className={`w-full px-4 py-3.5 rounded-xl bg-gray-50 dark:bg-gray-700/50 
-                         text-gray-900 dark:text-gray-100 
-                         border-2 transition-colors duration-200
-                         ${error ? 'border-red-400' : 'border-transparent'} 
-                         focus:outline-none focus:border-emerald-500 focus:bg-white dark:focus:bg-gray-700`}
-              autoFocus
+              type="text" value={name} onChange={(e) => { setName(e.target.value); setError(''); }}
+              placeholder="Friend's name" autoFocus
+              className={`w-full px-4 py-3.5 rounded-2xl bg-gray-50 dark:bg-gray-700/50 text-gray-800 dark:text-gray-100 font-nunito border-2 transition-colors duration-200 ${error ? 'border-red-400' : 'border-transparent'} focus:outline-none focus:border-teal-500`}
             />
-            {error && (
-              <div className="text-sm text-red-500 mt-2 animate-shake">{error}</div>
-            )}
+            {error && <div className="text-sm text-red-500 mt-2 font-nunito">{error}</div>}
           </div>
-
-          {/* Relationship Tier */}
           <div>
-            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
-              Relationship Type
-            </label>
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 font-nunito">Relationship Type</label>
             <div className="flex gap-3">
-              <button
-                onClick={() => setTier('close')}
-                className={`flex-1 py-3.5 rounded-xl font-medium transition-all duration-200 ${
-                  tier === 'close' 
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' 
-                    : 'bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                Close
-              </button>
-              <button
-                onClick={() => setTier('casual')}
-                className={`flex-1 py-3.5 rounded-xl font-medium transition-all duration-200 ${
-                  tier === 'casual' 
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' 
-                    : 'bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                Casual
-              </button>
+              {(['close', 'casual'] as const).map((t) => (
+                <button key={t} onClick={() => setTier(t)}
+                  className="flex-1 py-3.5 rounded-2xl font-semibold transition-all duration-200 font-nunito capitalize"
+                  style={{ backgroundColor: tier === t ? COLORS.teal : 'transparent', color: tier === t ? 'white' : COLORS.textSecondary, border: tier === t ? 'none' : '2px solid #E5E7EB', boxShadow: tier === t ? `0 4px 12px ${COLORS.teal}40` : 'none' }}>
+                  {t}
+                </button>
+              ))}
             </div>
           </div>
-
-          {/* Cadence */}
           <div>
-            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
-              Ideal Cadence
-            </label>
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 font-nunito">Ideal Cadence</label>
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm text-gray-500">Every</span>
-              <input
-                type="number"
-                value={cadence}
-                onChange={(e) => setCadence(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-20 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-700/50 
-                           text-gray-900 dark:text-gray-100 text-center font-medium
-                           focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                min="1"
-              />
-              <span className="text-sm text-gray-500">days</span>
+              <span className="text-sm text-gray-500 font-nunito">Every</span>
+              <input type="number" value={cadence} onChange={(e) => setCadence(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-20 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-700/50 text-gray-800 dark:text-gray-100 text-center font-medium font-nunito focus:outline-none focus:ring-2 focus:ring-teal-500" min="1"/>
+              <span className="text-sm text-gray-500 font-nunito">days</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {presets.map(preset => (
-                <button
-                  key={preset}
-                  onClick={() => setCadence(preset)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                    cadence === preset
-                      ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30'
-                      : 'bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  }`}
-                >
+                <button key={preset} onClick={() => setCadence(preset)}
+                  className="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 font-nunito"
+                  style={{ backgroundColor: cadence === preset ? COLORS.teal : '#F3F4F6', color: cadence === preset ? 'white' : COLORS.textSecondary, boxShadow: cadence === preset ? `0 4px 12px ${COLORS.teal}40` : 'none' }}>
                   {preset}d
                 </button>
               ))}
             </div>
           </div>
-
-          {/* Actions */}
           <div className="flex gap-3 pt-4">
-            <button
-              onClick={onClose}
-              className="flex-1 py-3.5 rounded-xl font-semibold 
-                         bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 
-                         hover:bg-gray-200 dark:hover:bg-gray-600 
-                         transition-colors duration-200"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="flex-1 py-3.5 rounded-xl font-semibold 
-                         bg-emerald-500 text-white 
-                         hover:bg-emerald-600 
-                         shadow-lg shadow-emerald-500/30
-                         transition-all duration-200"
-            >
-              Save
-            </button>
+            <button onClick={onClose} className="flex-1 py-4 rounded-2xl font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-nunito transition-colors">Cancel</button>
+            <button onClick={handleSave} className="flex-1 py-4 rounded-2xl font-semibold text-white font-nunito transition-all" style={{ backgroundColor: COLORS.teal, boxShadow: `0 4px 12px ${COLORS.teal}40` }}>Save</button>
           </div>
         </div>
       </div>
@@ -520,94 +374,40 @@ const AddEditFriendModal = ({
   );
 };
 
-const LogMeetingModal = ({
-  friend,
-  onClose,
-  onSave
-}: {
-  friend: Friend;
-  onClose: () => void;
-  onSave: (note?: string) => void;
-}) => {
+const LogMeetingModal = ({ friend, onClose, onSave }: { friend: Friend; onClose: () => void; onSave: (note?: string) => void }) => {
   const [note, setNote] = useState('');
 
   return (
     <>
-      <div 
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity duration-300" 
-        onClick={onClose}
-      />
-      <div className="fixed inset-x-0 bottom-0 z-50 bg-white dark:bg-gray-800 rounded-t-3xl animate-slide-up">
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={onClose}/>
+      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl animate-slide-up safe-area-bottom" style={{ backgroundColor: 'var(--card-bg)' }}>
         <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-600 rounded-full mx-auto mt-3 mb-4" />
-        
         <div className="px-6 pb-8">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              Log Meeting
-            </h2>
-            <button 
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-            >
+            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 font-nunito">Log Meeting</h2>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
               <X className="w-5 h-5 text-gray-400" />
             </button>
           </div>
-          
-          {/* Friend Preview */}
-          <div className="flex items-center gap-3 mb-6 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 
-                            flex items-center justify-center text-white font-semibold">
+          <div className="flex items-center gap-3 mb-6 p-4 rounded-2xl bg-gray-50 dark:bg-gray-700/50">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold font-nunito" style={{ background: `linear-gradient(135deg, ${COLORS.teal} 0%, ${COLORS.tealDark} 100%)` }}>
               {friend.name.charAt(0).toUpperCase()}
             </div>
             <div>
-              <div className="font-semibold text-gray-900 dark:text-gray-100">{friend.name}</div>
-              <div className="text-sm text-gray-500">Logging a connection</div>
+              <div className="font-semibold text-gray-800 dark:text-gray-100 font-nunito">{friend.name}</div>
+              <div className="text-sm text-gray-500 font-nunito">Logging a connection</div>
             </div>
           </div>
-
-          {/* Note Input */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
-              Note (optional)
-            </label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="What did you talk about?"
-              maxLength={200}
-              rows={3}
-              className="w-full px-4 py-3.5 rounded-xl bg-gray-50 dark:bg-gray-700/50 
-                         text-gray-900 dark:text-gray-100 resize-none
-                         focus:outline-none focus:ring-2 focus:ring-emerald-500
-                         transition-all duration-200"
-            />
-            <div className="text-xs text-gray-400 text-right mt-2 tabular-nums">
-              {note.length}/200
-            </div>
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 font-nunito">Note (optional)</label>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="What did you talk about?" maxLength={200} rows={3}
+              className="w-full px-4 py-3.5 rounded-2xl bg-gray-50 dark:bg-gray-700/50 text-gray-800 dark:text-gray-100 resize-none font-nunito focus:outline-none focus:ring-2 focus:ring-teal-500"/>
+            <div className="text-xs text-gray-400 text-right mt-2 tabular-nums font-nunito">{note.length}/200</div>
           </div>
-
-          {/* Actions */}
           <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="flex-1 py-3.5 rounded-xl font-semibold 
-                         bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 
-                         hover:bg-gray-200 dark:hover:bg-gray-600 
-                         transition-colors duration-200"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => onSave(note.trim() || undefined)}
-              className="flex-1 py-3.5 rounded-xl font-semibold 
-                         bg-emerald-500 text-white 
-                         hover:bg-emerald-600 
-                         shadow-lg shadow-emerald-500/30
-                         transition-all duration-200
-                         flex items-center justify-center gap-2"
-            >
-              <Check className="w-5 h-5" />
-              Log Meeting
+            <button onClick={onClose} className="flex-1 py-4 rounded-2xl font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-nunito">Cancel</button>
+            <button onClick={() => onSave(note.trim() || undefined)} className="flex-1 py-4 rounded-2xl font-semibold text-white font-nunito flex items-center justify-center gap-2" style={{ backgroundColor: COLORS.teal, boxShadow: `0 4px 12px ${COLORS.teal}40` }}>
+              <Check className="w-5 h-5" />Log Meeting
             </button>
           </div>
         </div>
@@ -616,61 +416,45 @@ const LogMeetingModal = ({
   );
 };
 
-// Import Confirmation Modal
-const ImportConfirmModal = ({
-  data,
-  onClose,
-  onConfirm
-}: {
-  data: DataExport;
-  onClose: () => void;
-  onConfirm: () => void;
-}) => {
-  return (
-    <>
-      <div 
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" 
-        onClick={onClose}
-      />
-      <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-md mx-auto animate-scale-in">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-          Import Data?
-        </h2>
-        
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 mb-6">
-          <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
-            <p><span className="font-medium">{data.friends.length}</span> friends</p>
-            <p><span className="font-medium">{data.meetings.length}</span> meetings</p>
-            <p className="text-xs text-gray-400 mt-2">
-              Exported: {new Date(data.exportedAt).toLocaleDateString()}
-            </p>
-          </div>
+const DeleteConfirmModal = ({ friend, onClose, onConfirm }: { friend: Friend; onClose: () => void; onConfirm: () => void }) => (
+  <>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={onClose}/>
+    <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-3xl p-6 max-w-sm mx-auto animate-scale-in" style={{ backgroundColor: 'var(--card-bg)' }}>
+      <div className="text-center mb-6">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: `${COLORS.attention}20` }}>
+          <Trash2 className="w-8 h-8" style={{ color: COLORS.attention }} />
         </div>
-        
-        <p className="text-sm text-amber-600 dark:text-amber-400 mb-6">
-          This will replace all your current data. Make sure you've exported your current data first.
-        </p>
-        
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 py-3 rounded-xl font-semibold 
-                       bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 py-3 rounded-xl font-semibold 
-                       bg-emerald-500 text-white"
-          >
-            Import
-          </button>
+        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 font-nunito mb-2">Delete {friend.name}?</h2>
+        <p className="text-sm text-gray-500 font-nunito">This will permanently remove {friend.name} and all their meeting history.</p>
+      </div>
+      <div className="flex gap-3">
+        <button onClick={onClose} className="flex-1 py-3.5 rounded-2xl font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-nunito">Cancel</button>
+        <button onClick={onConfirm} className="flex-1 py-3.5 rounded-2xl font-semibold text-white font-nunito" style={{ backgroundColor: COLORS.attention }}>Delete</button>
+      </div>
+    </div>
+  </>
+);
+
+const ImportConfirmModal = ({ data, onClose, onConfirm }: { data: DataExport; onClose: () => void; onConfirm: () => void }) => (
+  <>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={onClose}/>
+    <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-3xl p-6 max-w-sm mx-auto animate-scale-in" style={{ backgroundColor: 'var(--card-bg)' }}>
+      <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 font-nunito mb-4">Import Data?</h2>
+      <div className="rounded-2xl p-4 mb-6 bg-gray-50 dark:bg-gray-700/50">
+        <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1 font-nunito">
+          <p><span className="font-semibold">{data.friends.length}</span> friends</p>
+          <p><span className="font-semibold">{data.meetings.length}</span> meetings</p>
+          <p className="text-xs text-gray-400 mt-2">Exported: {new Date(data.exportedAt).toLocaleDateString()}</p>
         </div>
       </div>
-    </>
-  );
-};
+      <p className="text-sm mb-6 font-nunito" style={{ color: COLORS.approaching }}>This will replace all your current data.</p>
+      <div className="flex gap-3">
+        <button onClick={onClose} className="flex-1 py-3.5 rounded-2xl font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-nunito">Cancel</button>
+        <button onClick={onConfirm} className="flex-1 py-3.5 rounded-2xl font-semibold text-white font-nunito" style={{ backgroundColor: COLORS.teal }}>Import</button>
+      </div>
+    </div>
+  </>
+);
 
 // ==================== MAIN APP ====================
 
@@ -682,319 +466,159 @@ export default function App() {
   const [importData, setImportData] = useState<DataExport | null>(null);
   
   const [appState, setAppState] = useState<AppState>(() => {
-    const saved = localStorage.getItem('relationship-tracker-data');
+    const saved = localStorage.getItem('in-time-data');
     if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return {
-          friends: [],
-          meetings: [],
-          settings: {
-            theme: 'auto',
-            notificationsEnabled: true,
-            dailySummaryInterval: 30,
-            thresholdAlertsEnabled: true
-          }
-        };
-      }
+      try { return JSON.parse(saved); } catch { /* fall through */ }
     }
     return {
       friends: [],
       meetings: [],
-      settings: {
-        theme: 'auto',
-        notificationsEnabled: true,
-        dailySummaryInterval: 30,
-        thresholdAlertsEnabled: true
-      }
+      settings: { theme: 'auto', notificationsEnabled: true, dailySummaryInterval: 30, thresholdAlertsEnabled: true, hasCompletedOnboarding: false }
     };
   });
 
   useDarkMode(appState.settings.theme);
 
-  // Save to localStorage
+  useEffect(() => { localStorage.setItem('in-time-data', JSON.stringify(appState)); }, [appState]);
+
   useEffect(() => {
-    localStorage.setItem('relationship-tracker-data', JSON.stringify(appState));
-  }, [appState]);
+    const root = document.documentElement;
+    const isDark = root.classList.contains('dark');
+    root.style.setProperty('--card-bg', isDark ? COLORS.darkCard : COLORS.cream);
+    root.style.setProperty('--page-bg', isDark ? COLORS.darkBg : '#F5F5F5');
+  }, [appState.settings.theme]);
 
   const showToast = useCallback((message: string, type: Toast['type'] = 'success') => {
     const id = generateId();
     setToasts(prev => [...prev, { id, message, type }]);
   }, []);
 
-  const dismissToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
+  const dismissToast = useCallback((id: string) => { setToasts(prev => prev.filter(t => t.id !== id)); }, []);
 
-  // ==================== DATA EXPORT/IMPORT ====================
-  
   const handleExport = () => {
-    const exportData: DataExport = {
-      version: APP_VERSION,
-      exportedAt: Date.now(),
-      friends: appState.friends,
-      meetings: appState.meetings,
-      settings: appState.settings
-    };
-    
+    const exportData: DataExport = { version: APP_VERSION, exportedAt: Date.now(), friends: appState.friends, meetings: appState.meetings, settings: appState.settings };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `relationship-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = `in-time-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
-    showToast('Data exported successfully', 'success');
+    showToast('Data exported successfully');
   };
   
   const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target?.result as string) as DataExport;
-        
-        // Basic validation
-        if (!data.friends || !data.meetings || !data.settings) {
-          showToast('Invalid backup file format', 'error');
-          return;
-        }
-        
-        setImportData(data);
-        setCurrentModal('import-confirm');
-      } catch {
-        showToast('Could not read backup file', 'error');
-      }
+        if (!data.friends || !data.meetings || !data.settings) { showToast('Invalid backup file', 'error'); return; }
+        setImportData(data); setCurrentModal('import-confirm');
+      } catch { showToast('Could not read file', 'error'); }
     };
     reader.readAsText(file);
-    
-    // Reset the input
     event.target.value = '';
   };
   
   const confirmImport = () => {
     if (!importData) return;
-    
-    setAppState({
-      friends: importData.friends,
-      meetings: importData.meetings,
-      settings: importData.settings
-    });
-    
-    setImportData(null);
-    setCurrentModal(null);
-    showToast('Data imported successfully', 'success');
+    setAppState({ friends: importData.friends, meetings: importData.meetings, settings: importData.settings });
+    setImportData(null); setCurrentModal(null);
+    showToast('Data imported successfully');
   };
-
-  // ==================== FRIEND HANDLERS ====================
 
   const handleAddFriend = (data: Partial<Friend>) => {
     const newFriend: Friend = {
-      id: generateId(),
-      name: data.name!,
-      relationshipTier: data.relationshipTier!,
-      cadenceDays: data.cadenceDays!,
-      lastMeetingDate: null,
-      streakCount: 0,
-      multiplier: 1.0,
-      totalMeetings: 0,
-      isArchived: false,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+      id: generateId(), name: data.name!, relationshipTier: data.relationshipTier!, cadenceDays: data.cadenceDays!,
+      lastMeetingDate: null, streakCount: 0, multiplier: 1.0, totalMeetings: 0, isArchived: false, createdAt: Date.now(), updatedAt: Date.now()
     };
-    
-    setAppState(prev => ({
-      ...prev,
-      friends: [...prev.friends, newFriend]
-    }));
-    
+    setAppState(prev => ({ ...prev, friends: [...prev.friends, newFriend] }));
     setCurrentModal(null);
     showToast(`${newFriend.name} added`);
   };
 
   const handleEditFriend = (data: Partial<Friend>) => {
     if (!selectedFriendId) return;
-    
-    setAppState(prev => ({
-      ...prev,
-      friends: prev.friends.map(f => 
-        f.id === selectedFriendId 
-          ? { ...f, ...data, updatedAt: Date.now() }
-          : f
-      )
-    }));
-    
+    setAppState(prev => ({ ...prev, friends: prev.friends.map(f => f.id === selectedFriendId ? { ...f, ...data, updatedAt: Date.now() } : f) }));
     setCurrentModal(null);
     showToast('Friend updated');
   };
 
   const handleLogMeeting = (note?: string) => {
     if (!selectedFriendId) return;
-    
     const friend = appState.friends.find(f => f.id === selectedFriendId);
     if (!friend) return;
-
     const now = Date.now();
-    const newMeeting: Meeting = {
-      id: generateId(),
-      friendId: selectedFriendId,
-      timestamp: now,
-      note,
-      createdAt: now
-    };
-
-    const daysSinceLastMeeting = friend.lastMeetingDate 
-      ? Math.floor((now - friend.lastMeetingDate) / 86400000)
-      : 0;
-
-    const newStreak = daysSinceLastMeeting <= friend.cadenceDays && friend.lastMeetingDate
-      ? friend.streakCount + 1
-      : 1;
-
+    const newMeeting: Meeting = { id: generateId(), friendId: selectedFriendId, timestamp: now, note, createdAt: now };
+    const daysSinceLastMeeting = friend.lastMeetingDate ? Math.floor((now - friend.lastMeetingDate) / 86400000) : 0;
+    const newStreak = daysSinceLastMeeting <= friend.cadenceDays && friend.lastMeetingDate ? friend.streakCount + 1 : 1;
     const newMultiplier = Math.min(3.0, 1.0 + (newStreak * 0.1));
-
     setAppState(prev => ({
       ...prev,
       meetings: [...prev.meetings, newMeeting],
-      friends: prev.friends.map(f =>
-        f.id === selectedFriendId
-          ? {
-              ...f,
-              lastMeetingDate: now,
-              streakCount: newStreak,
-              multiplier: newMultiplier,
-              totalMeetings: f.totalMeetings + 1,
-              updatedAt: now
-            }
-          : f
-      )
+      friends: prev.friends.map(f => f.id === selectedFriendId ? { ...f, lastMeetingDate: now, streakCount: newStreak, multiplier: newMultiplier, totalMeetings: f.totalMeetings + 1, updatedAt: now } : f)
     }));
-
     setCurrentModal(null);
     showToast(`Meeting with ${friend.name} logged`);
   };
 
-  const handleArchiveFriend = (friendId: string) => {
-    const friend = appState.friends.find(f => f.id === friendId);
+  const handleDeleteFriend = () => {
+    if (!selectedFriendId) return;
+    const friend = appState.friends.find(f => f.id === selectedFriendId);
     if (!friend) return;
-
-    setAppState(prev => ({
-      ...prev,
-      friends: prev.friends.map(f =>
-        f.id === friendId
-          ? { ...f, isArchived: true, updatedAt: Date.now() }
-          : f
-      )
-    }));
-
-    setCurrentScreen('home');
-    setSelectedFriendId(null);
-    showToast(`${friend.name} archived`);
+    setAppState(prev => ({ ...prev, friends: prev.friends.filter(f => f.id !== selectedFriendId), meetings: prev.meetings.filter(m => m.friendId !== selectedFriendId) }));
+    setCurrentModal(null); setCurrentScreen('home'); setSelectedFriendId(null);
+    showToast(`${friend.name} deleted`);
   };
 
-  // ==================== DERIVED STATE ====================
-
-  const selectedFriend = selectedFriendId 
-    ? appState.friends.find(f => f.id === selectedFriendId) 
-    : null;
-
+  const selectedFriend = selectedFriendId ? appState.friends.find(f => f.id === selectedFriendId) : null;
   const activeFriendCount = appState.friends.filter(f => !f.isArchived).length;
-  
-  const activeFriends = appState.friends
-    .filter(f => !f.isArchived)
-    .sort((a, b) => {
-      // Sort by urgency (closest to/past cadence first)
-      const aDaysUntil = getDaysUntilDue(a.lastMeetingDate, a.cadenceDays);
-      const bDaysUntil = getDaysUntilDue(b.lastMeetingDate, b.cadenceDays);
-      return aDaysUntil - bDaysUntil;
-    });
-
-  const overallHealth = activeFriends.length > 0
-    ? Math.round(activeFriends.reduce((sum, f) => sum + calculateHealthScore(f, appState.meetings), 0) / activeFriends.length)
-    : 0;
-
-  // ==================== RENDER ====================
+  const activeFriends = appState.friends.filter(f => !f.isArchived).sort((a, b) => getDaysUntilDue(a.lastMeetingDate, a.cadenceDays) - getDaysUntilDue(b.lastMeetingDate, b.cadenceDays));
+  const overallHealth = activeFriends.length > 0 ? Math.round(activeFriends.reduce((sum, f) => sum + calculateHealthScore(f, appState.meetings), 0) / activeFriends.length) : 0;
+  const friendsNeedingAttention = activeFriends.filter(f => getDaysUntilDue(f.lastMeetingDate, f.cadenceDays) <= 3).length;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+    <div className="h-screen flex flex-col transition-colors duration-300" style={{ backgroundColor: 'var(--page-bg, #F5F5F5)' }}>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* HOME SCREEN */}
       {currentScreen === 'home' && (
         <div className="flex-1 overflow-auto pb-24">
-          <div className="max-w-2xl mx-auto p-4">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-8 pt-2">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  Connections
-                </h1>
-                <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
-                  {activeFriendCount} friend{activeFriendCount !== 1 ? 's' : ''}
-                </p>
-              </div>
-              <button
-                onClick={() => setCurrentModal('add-friend')}
-                disabled={activeFriendCount >= 10}
-                className="w-12 h-12 rounded-full bg-emerald-500 text-white 
-                           flex items-center justify-center 
-                           shadow-lg shadow-emerald-500/30
-                           hover:bg-emerald-600 hover:shadow-emerald-500/40
-                           disabled:bg-gray-300 disabled:shadow-none disabled:cursor-not-allowed 
-                           transition-all duration-200"
-              >
-                <Plus className="w-6 h-6" />
-              </button>
-            </div>
-            
-            {/* Empty State */}
-            {activeFriendCount === 0 ? (
-              <div className="text-center py-20">
-                <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gray-100 dark:bg-gray-800 
-                                flex items-center justify-center">
-                  <span className="text-4xl">👋</span>
+          <div className="relative pt-safe-top" style={{ backgroundColor: COLORS.amber }}>
+            <div className="px-5 pt-4 pb-16">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold text-white font-nunito">{getGreeting()} ☀️</h1>
+                  <p className="text-white/80 text-sm mt-1 font-nunito">
+                    {friendsNeedingAttention > 0 ? `${friendsNeedingAttention} friend${friendsNeedingAttention > 1 ? 's' : ''} to catch up with` : activeFriendCount > 0 ? "You're all caught up!" : "Add your first friend to get started"}
+                  </p>
                 </div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  Add your first friend
-                </h2>
-                <p className="text-gray-400 dark:text-gray-500 max-w-xs mx-auto">
-                  Start tracking meaningful connections by adding someone you care about
-                </p>
+                <button onClick={() => setCurrentModal('add-friend')} disabled={activeFriendCount >= 10}
+                  className="w-12 h-12 rounded-full text-white flex items-center justify-center disabled:opacity-50 transition-all duration-200 hover:scale-105 active:scale-95"
+                  style={{ backgroundColor: COLORS.teal, boxShadow: `0 4px 12px ${COLORS.teal}60` }}>
+                  <Plus className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+            <WaveDivider className="absolute bottom-0 left-0 right-0 text-gray-100 dark:text-gray-900 h-8" />
+          </div>
+          
+          <div className="px-5 -mt-2">
+            {activeFriendCount === 0 ? (
+              <div className="text-center py-16">
+                <div className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: `${COLORS.amber}20` }}>
+                  <span className="text-5xl">👋</span>
+                </div>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2 font-nunito">Add your first friend</h2>
+                <p className="text-gray-500 max-w-xs mx-auto font-nunito">Start tracking meaningful connections by adding someone you care about</p>
               </div>
             ) : (
-              <>
-                {/* Friend Limit Warning */}
-                {activeFriendCount >= 10 && (
-                  <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 
-                                  border border-amber-200 dark:border-amber-800 
-                                  rounded-2xl">
-                    <div className="text-sm text-amber-700 dark:text-amber-200">
-                      Friend limit reached. Archive inactive friends to add new ones.
-                    </div>
-                  </div>
-                )}
-                
-                {/* Friend Cards */}
-                <div className="space-y-3">
-                  {activeFriends.map(friend => (
-                    <FriendCard 
-                      key={friend.id}
-                      friend={friend}
-                      meetings={appState.meetings}
-                      onClick={() => {
-                        setSelectedFriendId(friend.id);
-                        setCurrentScreen('friend-detail');
-                      }}
-                    />
-                  ))}
-                </div>
-              </>
+              <div className="space-y-4">
+                {activeFriends.map(friend => (
+                  <FriendCard key={friend.id} friend={friend} meetings={appState.meetings} onClick={() => { setSelectedFriendId(friend.id); setCurrentScreen('friend-detail'); }}/>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -1003,154 +627,100 @@ export default function App() {
       {/* FRIEND DETAIL SCREEN */}
       {currentScreen === 'friend-detail' && selectedFriend && (
         <div className="flex-1 overflow-auto pb-32">
-          <div className="max-w-2xl mx-auto">
-            {/* Header */}
-            <div className="sticky top-0 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-lg z-10 
-                            px-4 py-3 flex items-center justify-between border-b border-gray-200/50 dark:border-gray-800/50">
-              <button 
-                onClick={() => {
-                  setCurrentScreen('home');
-                  setSelectedFriendId(null);
-                }}
-                className="p-2 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 rounded-full transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              </button>
-              <span className="font-semibold text-gray-900 dark:text-gray-100">{selectedFriend.name}</span>
-              <div className="w-10" />
-            </div>
-
-            <div className="p-4">
-              {/* Profile Section */}
-              <div className="flex flex-col items-center mb-8 pt-4">
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 
-                                flex items-center justify-center text-white font-bold text-3xl mb-4
-                                shadow-xl shadow-purple-500/30">
-                  {selectedFriend.name.charAt(0).toUpperCase()}
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
-                  {selectedFriend.name}
-                </h2>
-                <span className="text-sm text-gray-400 dark:text-gray-500">
-                  {selectedFriend.relationshipTier} · every {selectedFriend.cadenceDays} days
-                </span>
-              </div>
-
-              {/* Timer Card */}
-              <div className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 mb-6 shadow-sm">
-                <TimerDisplay lastMeeting={selectedFriend.lastMeetingDate} cadence={selectedFriend.cadenceDays} />
-                
-                {/* Stats Row */}
-                <div className="flex justify-center gap-8 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700/50">
-                  {selectedFriend.streakCount > 0 && (
-                    <div className="text-center">
-                      <div className="flex items-center gap-1.5 justify-center mb-1">
-                        <Flame className="w-5 h-5 text-orange-400" />
-                        <span className="text-2xl font-bold text-orange-500">{selectedFriend.streakCount}</span>
-                      </div>
-                      <div className="text-xs text-gray-400">streak</div>
-                    </div>
-                  )}
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-emerald-500">{selectedFriend.multiplier.toFixed(1)}×</div>
-                    <div className="text-xs text-gray-400">multiplier</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-500">{selectedFriend.totalMeetings}</div>
-                    <div className="text-xs text-gray-400">meetings</div>
-                  </div>
-                </div>
-
-                {/* Progress Bar */}
-                <ProgressBar lastMeeting={selectedFriend.lastMeetingDate} cadence={selectedFriend.cadenceDays} />
-                
-                {/* Health Score */}
-                <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-500">Health Score</span>
-                    <span className="text-lg font-bold text-emerald-500">
-                      {calculateHealthScore(selectedFriend, appState.meetings)}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-gray-100 dark:bg-gray-700/50 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-700"
-                      style={{ width: `${calculateHealthScore(selectedFriend, appState.meetings)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Meeting History */}
-              <div className="mb-6">
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">Meeting History</h3>
-                {(() => {
-                  const friendMeetings = appState.meetings
-                    .filter(m => m.friendId === selectedFriend.id)
-                    .sort((a, b) => b.timestamp - a.timestamp);
-                  
-                  return friendMeetings.length === 0 ? (
-                    <div className="text-center py-12 bg-white dark:bg-gray-800/50 rounded-2xl">
-                      <div className="text-4xl mb-3">📅</div>
-                      <div className="text-sm text-gray-400">No meetings yet</div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {friendMeetings.map(meeting => (
-                        <div 
-                          key={meeting.id} 
-                          className="bg-white dark:bg-gray-800/50 rounded-xl p-4 transition-all duration-200 hover:shadow-md"
-                        >
-                          <div className="flex justify-between items-start mb-1">
-                            <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
-                              {new Date(meeting.timestamp).toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric', 
-                                year: 'numeric' 
-                              })}
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              {new Date(meeting.timestamp).toLocaleTimeString('en-US', { 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
-                              })}
-                            </div>
-                          </div>
-                          {meeting.note && (
-                            <div className="text-sm text-gray-500 dark:text-gray-400">{meeting.note}</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Archive Button */}
-              <button
-                onClick={() => handleArchiveFriend(selectedFriend.id)}
-                className="w-full py-3 text-sm text-gray-400 hover:text-red-500 transition-colors"
-              >
-                Archive this friend
-              </button>
-            </div>
-
-            {/* Fixed Log Meeting Button */}
-            <div className="fixed bottom-24 left-0 right-0 p-4 bg-gradient-to-t from-gray-50 dark:from-gray-900 via-gray-50/80 dark:via-gray-900/80 to-transparent pt-8">
-              <div className="max-w-2xl mx-auto">
-                <button
-                  onClick={() => setCurrentModal('log-meeting')}
-                  className="w-full h-14 bg-emerald-500 text-white rounded-2xl font-semibold 
-                             shadow-lg shadow-emerald-500/30
-                             hover:bg-emerald-600 hover:shadow-emerald-500/40
-                             transition-all duration-200 
-                             flex items-center justify-center gap-2"
-                >
-                  <Check className="w-5 h-5" />
-                  Log Meeting
+          <div className="relative pt-safe-top" style={{ backgroundColor: COLORS.amber }}>
+            <div className="px-5 pt-4 pb-20">
+              <div className="flex items-center justify-between">
+                <button onClick={() => { setCurrentScreen('home'); setSelectedFriendId(null); }} className="p-2 -ml-2 hover:bg-white/20 rounded-full transition-colors">
+                  <ChevronLeft className="w-6 h-6 text-white" />
                 </button>
+                <span className="font-bold text-white font-nunito text-lg">{selectedFriend.name}</span>
+                <div className="w-10" />
               </div>
             </div>
+            <div className="absolute -bottom-12 left-1/2 -translate-x-1/2">
+              <div className="w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-3xl font-nunito border-4 border-white dark:border-gray-900"
+                style={{ background: `linear-gradient(135deg, ${COLORS.teal} 0%, ${COLORS.tealDark} 100%)`, boxShadow: `0 8px 24px ${COLORS.teal}40` }}>
+                {selectedFriend.name.charAt(0).toUpperCase()}
+              </div>
+            </div>
+            <WaveDivider className="absolute bottom-0 left-0 right-0 text-gray-100 dark:text-gray-900 h-8" />
+          </div>
+
+          <div className="px-5 pt-16">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 font-nunito">{selectedFriend.name}</h2>
+              <span className="text-sm text-gray-500 font-nunito">{selectedFriend.relationshipTier} · every {selectedFriend.cadenceDays} days</span>
+            </div>
+
+            <div className="rounded-3xl p-6 mb-6" style={{ backgroundColor: 'var(--card-bg)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <TimerDisplay lastMeeting={selectedFriend.lastMeetingDate} cadence={selectedFriend.cadenceDays} size="large" />
+              <div className="flex justify-center gap-8 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700/50">
+                {selectedFriend.streakCount > 0 && (
+                  <div className="text-center">
+                    <div className="flex items-center gap-1.5 justify-center mb-1">
+                      <Flame className="w-5 h-5" style={{ color: COLORS.attention }} />
+                      <span className="text-2xl font-bold font-nunito" style={{ color: COLORS.attention }}>{selectedFriend.streakCount}</span>
+                    </div>
+                    <div className="text-xs text-gray-400 font-nunito">streak</div>
+                  </div>
+                )}
+                <div className="text-center">
+                  <div className="text-2xl font-bold font-nunito" style={{ color: COLORS.teal }}>{selectedFriend.multiplier.toFixed(1)}×</div>
+                  <div className="text-xs text-gray-400 font-nunito">multiplier</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold font-nunito" style={{ color: COLORS.teal }}>{selectedFriend.totalMeetings}</div>
+                  <div className="text-xs text-gray-400 font-nunito">meetings</div>
+                </div>
+              </div>
+              <ProgressBar lastMeeting={selectedFriend.lastMeetingDate} cadence={selectedFriend.cadenceDays} />
+              <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700/50">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-500 font-nunito">Health Score</span>
+                  <span className="text-lg font-bold font-nunito" style={{ color: COLORS.teal }}>{calculateHealthScore(selectedFriend, appState.meetings)}</span>
+                </div>
+                <div className="h-2 bg-gray-100 dark:bg-gray-700/50 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${calculateHealthScore(selectedFriend, appState.meetings)}%`, backgroundColor: COLORS.teal }}/>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 font-nunito">Meeting History</h3>
+              {(() => {
+                const friendMeetings = appState.meetings.filter(m => m.friendId === selectedFriend.id).sort((a, b) => b.timestamp - a.timestamp);
+                return friendMeetings.length === 0 ? (
+                  <div className="text-center py-12 rounded-2xl" style={{ backgroundColor: 'var(--card-bg)' }}>
+                    <div className="text-4xl mb-3">📅</div>
+                    <div className="text-sm text-gray-400 font-nunito">No meetings yet</div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {friendMeetings.map(meeting => (
+                      <div key={meeting.id} className="rounded-2xl p-4" style={{ backgroundColor: 'var(--card-bg)' }}>
+                        <div className="flex justify-between items-start mb-1">
+                          <div className="font-medium text-sm text-gray-800 dark:text-gray-100 font-nunito">{new Date(meeting.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                          <div className="text-xs text-gray-400 font-nunito">{new Date(meeting.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</div>
+                        </div>
+                        {meeting.note && <div className="text-sm text-gray-500 font-nunito">{meeting.note}</div>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <button onClick={() => setCurrentModal('delete-confirm')} className="w-full py-3 text-sm transition-colors font-nunito rounded-2xl border mb-8" style={{ color: COLORS.attention, borderColor: COLORS.attention }}>
+              Delete Friend
+            </button>
+          </div>
+
+          <div className="fixed bottom-24 left-0 right-0 p-5 safe-area-bottom" style={{ background: 'linear-gradient(to top, var(--page-bg) 80%, transparent)' }}>
+            <button onClick={() => setCurrentModal('log-meeting')}
+              className="w-full h-14 text-white rounded-2xl font-semibold font-nunito flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              style={{ backgroundColor: COLORS.teal, boxShadow: `0 4px 16px ${COLORS.teal}50` }}>
+              <Check className="w-5 h-5" />Log Meeting
+            </button>
           </div>
         </div>
       )}
@@ -1158,68 +728,46 @@ export default function App() {
       {/* INSIGHTS SCREEN */}
       {currentScreen === 'insights' && (
         <div className="flex-1 overflow-auto pb-24">
-          <div className="max-w-2xl mx-auto p-4">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-8 pt-2">Insights</h1>
-
-            {/* Overall Health Card */}
-            <div className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 mb-4 shadow-sm">
-              <h2 className="text-sm font-medium text-gray-500 mb-4">Overall Health</h2>
+          <div className="relative pt-safe-top" style={{ backgroundColor: COLORS.amber }}>
+            <div className="px-5 pt-4 pb-16"><h1 className="text-2xl font-bold text-white font-nunito">Insights</h1></div>
+            <WaveDivider className="absolute bottom-0 left-0 right-0 text-gray-100 dark:text-gray-900 h-8" />
+          </div>
+          <div className="px-5 -mt-2">
+            <div className="rounded-3xl p-6 mb-4" style={{ backgroundColor: 'var(--card-bg)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <h2 className="text-sm font-medium text-gray-500 mb-4 font-nunito">Overall Health</h2>
               <div className="flex items-center justify-center mb-4">
                 <div className="relative w-36 h-36">
                   <svg className="transform -rotate-90 w-36 h-36">
-                    <circle 
-                      cx="72" cy="72" r="60" 
-                      stroke="currentColor" 
-                      strokeWidth="10" 
-                      fill="none" 
-                      className="text-gray-100 dark:text-gray-700/50" 
-                    />
-                    <circle 
-                      cx="72" cy="72" r="60" 
-                      stroke="currentColor"
-                      strokeWidth="10" 
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeDasharray={`${overallHealth * 3.77} 377`}
-                      className="text-emerald-500 transition-all duration-700"
-                    />
+                    <circle cx="72" cy="72" r="60" stroke="currentColor" strokeWidth="10" fill="none" className="text-gray-100 dark:text-gray-700/50" />
+                    <circle cx="72" cy="72" r="60" strokeWidth="10" fill="none" strokeLinecap="round" strokeDasharray={`${overallHealth * 3.77} 377`} className="transition-all duration-700" style={{ stroke: COLORS.teal }}/>
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-4xl font-bold text-gray-900 dark:text-gray-100">{overallHealth}</span>
+                    <span className="text-4xl font-bold text-gray-800 dark:text-gray-100 font-nunito">{overallHealth}</span>
                   </div>
                 </div>
               </div>
-              <p className="text-center text-sm text-gray-400">
-                {overallHealth >= 80 ? 'Excellent' : overallHealth >= 60 ? 'Good' : overallHealth >= 40 ? 'Needs attention' : 'Getting started'}
-              </p>
+              <p className="text-center text-sm text-gray-400 font-nunito">{overallHealth >= 80 ? 'Excellent' : overallHealth >= 60 ? 'Good' : overallHealth >= 40 ? 'Needs attention' : 'Getting started'}</p>
             </div>
-
-            {/* Individual Health Scores */}
-            <div className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-sm">
-              <h2 className="text-sm font-medium text-gray-500 mb-4">Individual Scores</h2>
+            <div className="rounded-3xl p-6" style={{ backgroundColor: 'var(--card-bg)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <h2 className="text-sm font-medium text-gray-500 mb-4 font-nunito">Individual Scores</h2>
               {activeFriends.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm">No friends yet</div>
+                <div className="text-center py-8 text-gray-400 text-sm font-nunito">No friends yet</div>
               ) : (
                 <div className="space-y-4">
-                  {activeFriends
-                    .sort((a, b) => calculateHealthScore(b, appState.meetings) - calculateHealthScore(a, appState.meetings))
-                    .map(friend => {
-                      const health = calculateHealthScore(friend, appState.meetings);
-                      return (
-                        <div key={friend.id}>
-                          <div className="flex justify-between text-sm mb-2">
-                            <span className="font-medium text-gray-900 dark:text-gray-100">{friend.name}</span>
-                            <span className="font-semibold text-emerald-500 tabular-nums">{health}</span>
-                          </div>
-                          <div className="h-2 bg-gray-100 dark:bg-gray-700/50 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-emerald-500 rounded-full transition-all duration-700"
-                              style={{ width: `${health}%` }}
-                            />
-                          </div>
+                  {activeFriends.sort((a, b) => calculateHealthScore(b, appState.meetings) - calculateHealthScore(a, appState.meetings)).map(friend => {
+                    const health = calculateHealthScore(friend, appState.meetings);
+                    return (
+                      <div key={friend.id}>
+                        <div className="flex justify-between text-sm mb-2">
+                          <span className="font-medium text-gray-800 dark:text-gray-100 font-nunito">{friend.name}</span>
+                          <span className="font-semibold tabular-nums font-nunito" style={{ color: COLORS.teal }}>{health}</span>
                         </div>
-                      );
-                    })}
+                        <div className="h-2 bg-gray-100 dark:bg-gray-700/50 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${health}%`, backgroundColor: COLORS.teal }}/>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1230,105 +778,60 @@ export default function App() {
       {/* SETTINGS SCREEN */}
       {currentScreen === 'settings' && (
         <div className="flex-1 overflow-auto pb-24">
-          <div className="max-w-2xl mx-auto p-4">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-8 pt-2">Settings</h1>
-
-            {/* Appearance */}
-            <div className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl overflow-hidden mb-4 shadow-sm">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700/50">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Appearance</h3>
+          <div className="relative pt-safe-top" style={{ backgroundColor: COLORS.amber }}>
+            <div className="px-5 pt-4 pb-16"><h1 className="text-2xl font-bold text-white font-nunito">Settings</h1></div>
+            <WaveDivider className="absolute bottom-0 left-0 right-0 text-gray-100 dark:text-gray-900 h-8" />
+          </div>
+          <div className="px-5 -mt-2">
+            <div className="rounded-3xl overflow-hidden mb-4" style={{ backgroundColor: 'var(--card-bg)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700/50">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide font-nunito">Appearance</h3>
               </div>
-              <div className="px-4 py-4 flex items-center justify-between">
-                <span className="text-gray-900 dark:text-gray-100">Theme</span>
-                <select 
-                  value={appState.settings.theme}
-                  onChange={(e) => setAppState(prev => ({
-                    ...prev,
-                    settings: { ...prev.settings, theme: e.target.value as 'auto' | 'light' | 'dark' }
-                  }))}
-                  className="bg-gray-100 dark:bg-gray-700 px-4 py-2 rounded-xl border-none 
-                             text-gray-900 dark:text-gray-100 font-medium
-                             focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="auto">Auto</option>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
+              <div className="px-5 py-4 flex items-center justify-between">
+                <span className="text-gray-800 dark:text-gray-100 font-nunito">Theme</span>
+                <select value={appState.settings.theme} onChange={(e) => setAppState(prev => ({ ...prev, settings: { ...prev.settings, theme: e.target.value as 'auto' | 'light' | 'dark' } }))}
+                  className="bg-gray-100 dark:bg-gray-700 px-4 py-2 rounded-xl border-none text-gray-800 dark:text-gray-100 font-medium font-nunito focus:outline-none">
+                  <option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option>
                 </select>
               </div>
             </div>
-
-            {/* Notifications */}
-            <div className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl overflow-hidden mb-4 shadow-sm">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700/50">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Notifications</h3>
+            <div className="rounded-3xl overflow-hidden mb-4" style={{ backgroundColor: 'var(--card-bg)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700/50">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide font-nunito">Notifications</h3>
               </div>
               <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
-                <div className="px-4 py-4 flex items-center justify-between">
-                  <span className="text-gray-900 dark:text-gray-100">Daily summary</span>
-                  <input 
-                    type="checkbox"
-                    checked={appState.settings.notificationsEnabled}
-                    onChange={(e) => setAppState(prev => ({
-                      ...prev,
-                      settings: { ...prev.settings, notificationsEnabled: e.target.checked }
-                    }))}
-                    className="w-5 h-5 rounded accent-emerald-500"
-                  />
+                <div className="px-5 py-4 flex items-center justify-between">
+                  <span className="text-gray-800 dark:text-gray-100 font-nunito">Daily summary</span>
+                  <input type="checkbox" checked={appState.settings.notificationsEnabled} onChange={(e) => setAppState(prev => ({ ...prev, settings: { ...prev.settings, notificationsEnabled: e.target.checked } }))} className="w-5 h-5 rounded" style={{ accentColor: COLORS.teal }}/>
                 </div>
-                <div className="px-4 py-4 flex items-center justify-between">
-                  <span className="text-gray-900 dark:text-gray-100">Threshold alerts</span>
-                  <input 
-                    type="checkbox"
-                    checked={appState.settings.thresholdAlertsEnabled}
-                    onChange={(e) => setAppState(prev => ({
-                      ...prev,
-                      settings: { ...prev.settings, thresholdAlertsEnabled: e.target.checked }
-                    }))}
-                    className="w-5 h-5 rounded accent-emerald-500"
-                  />
+                <div className="px-5 py-4 flex items-center justify-between">
+                  <span className="text-gray-800 dark:text-gray-100 font-nunito">Threshold alerts</span>
+                  <input type="checkbox" checked={appState.settings.thresholdAlertsEnabled} onChange={(e) => setAppState(prev => ({ ...prev, settings: { ...prev.settings, thresholdAlertsEnabled: e.target.checked } }))} className="w-5 h-5 rounded" style={{ accentColor: COLORS.teal }}/>
                 </div>
               </div>
             </div>
-
-            {/* Data Management - NEW SECTION */}
-            <div className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl overflow-hidden mb-4 shadow-sm">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700/50">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Data</h3>
+            <div className="rounded-3xl overflow-hidden mb-4" style={{ backgroundColor: 'var(--card-bg)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700/50">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide font-nunito">Data</h3>
               </div>
               <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
-                <button 
-                  onClick={handleExport}
-                  className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <Download className="w-5 h-5 text-emerald-500" />
-                    <span className="text-gray-900 dark:text-gray-100">Export Data</span>
-                  </div>
-                  <span className="text-sm text-gray-400">Download backup</span>
+                <button onClick={handleExport} className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <div className="flex items-center gap-3"><Download className="w-5 h-5" style={{ color: COLORS.teal }} /><span className="text-gray-800 dark:text-gray-100 font-nunito">Export Data</span></div>
+                  <span className="text-sm text-gray-400 font-nunito">Download backup</span>
                 </button>
-                <label className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <Upload className="w-5 h-5 text-blue-500" />
-                    <span className="text-gray-900 dark:text-gray-100">Import Data</span>
-                  </div>
-                  <span className="text-sm text-gray-400">Restore backup</span>
-                  <input 
-                    type="file" 
-                    accept=".json"
-                    onChange={handleImportFile}
-                    className="hidden" 
-                  />
+                <label className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
+                  <div className="flex items-center gap-3"><Upload className="w-5 h-5" style={{ color: COLORS.teal }} /><span className="text-gray-800 dark:text-gray-100 font-nunito">Import Data</span></div>
+                  <span className="text-sm text-gray-400 font-nunito">Restore backup</span>
+                  <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
                 </label>
               </div>
             </div>
-
-            {/* About */}
-            <div className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl overflow-hidden shadow-sm">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700/50">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">About</h3>
+            <div className="rounded-3xl overflow-hidden" style={{ backgroundColor: 'var(--card-bg)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700/50">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide font-nunito">About</h3>
               </div>
-              <div className="px-4 py-4 flex items-center justify-between">
-                <span className="text-gray-900 dark:text-gray-100">Version</span>
+              <div className="px-5 py-4 flex items-center justify-between">
+                <span className="text-gray-800 dark:text-gray-100 font-nunito">Version</span>
                 <span className="text-gray-400 font-mono text-sm">{APP_VERSION}</span>
               </div>
             </div>
@@ -1337,127 +840,39 @@ export default function App() {
       )}
 
       {/* BOTTOM NAVIGATION */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg 
-                      border-t border-gray-200/50 dark:border-gray-700/50 safe-area-pb">
-        <div className="max-w-2xl mx-auto flex justify-around py-2">
-          {[
-            { screen: 'home' as const, icon: Home, label: 'Home' },
-            { screen: 'insights' as const, icon: BarChart3, label: 'Insights' },
-            { screen: 'settings' as const, icon: Settings, label: 'Settings' },
-          ].map(({ screen, icon: Icon, label }) => (
-            <button 
-              key={screen}
-              onClick={() => setCurrentScreen(screen)}
-              className={`flex flex-col items-center gap-1 px-6 py-2 rounded-xl transition-all duration-200 ${
-                currentScreen === screen 
-                  ? 'text-emerald-500' 
-                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-            >
-              <Icon className={`w-6 h-6 transition-transform duration-200 ${currentScreen === screen ? 'scale-110' : ''}`} />
-              <span className="text-xs font-medium">{label}</span>
+      <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200/50 dark:border-gray-700/50 safe-area-bottom" style={{ backgroundColor: 'var(--card-bg)' }}>
+        <div className="flex justify-around py-2">
+          {[{ screen: 'home' as const, icon: Home, label: 'Home' }, { screen: 'insights' as const, icon: BarChart3, label: 'Insights' }, { screen: 'settings' as const, icon: Settings, label: 'Settings' }].map(({ screen, icon: Icon, label }) => (
+            <button key={screen} onClick={() => setCurrentScreen(screen)} className="flex flex-col items-center gap-1 px-6 py-2 rounded-xl transition-all duration-200">
+              <Icon className={`w-6 h-6 transition-transform duration-200 ${currentScreen === screen ? 'scale-110' : ''}`} style={{ color: currentScreen === screen ? COLORS.teal : '#9CA3AF' }}/>
+              <span className="text-xs font-medium font-nunito" style={{ color: currentScreen === screen ? COLORS.teal : '#9CA3AF' }}>{label}</span>
             </button>
           ))}
         </div>
       </div>
 
       {/* MODALS */}
-      {currentModal === 'add-friend' && (
-        <AddEditFriendModal
-          onClose={() => setCurrentModal(null)}
-          onSave={handleAddFriend}
-          friendCount={activeFriendCount}
-        />
-      )}
+      {currentModal === 'add-friend' && <AddEditFriendModal onClose={() => setCurrentModal(null)} onSave={handleAddFriend} friendCount={activeFriendCount}/>}
+      {currentModal === 'edit-friend' && selectedFriend && <AddEditFriendModal friend={selectedFriend} onClose={() => setCurrentModal(null)} onSave={handleEditFriend} friendCount={activeFriendCount}/>}
+      {currentModal === 'log-meeting' && selectedFriend && <LogMeetingModal friend={selectedFriend} onClose={() => setCurrentModal(null)} onSave={handleLogMeeting}/>}
+      {currentModal === 'delete-confirm' && selectedFriend && <DeleteConfirmModal friend={selectedFriend} onClose={() => setCurrentModal(null)} onConfirm={handleDeleteFriend}/>}
+      {currentModal === 'import-confirm' && importData && <ImportConfirmModal data={importData} onClose={() => { setImportData(null); setCurrentModal(null); }} onConfirm={confirmImport}/>}
 
-      {currentModal === 'edit-friend' && selectedFriend && (
-        <AddEditFriendModal
-          friend={selectedFriend}
-          onClose={() => setCurrentModal(null)}
-          onSave={handleEditFriend}
-          friendCount={activeFriendCount}
-        />
-      )}
-
-      {currentModal === 'log-meeting' && selectedFriend && (
-        <LogMeetingModal
-          friend={selectedFriend}
-          onClose={() => setCurrentModal(null)}
-          onSave={handleLogMeeting}
-        />
-      )}
-
-      {currentModal === 'import-confirm' && importData && (
-        <ImportConfirmModal
-          data={importData}
-          onClose={() => {
-            setImportData(null);
-            setCurrentModal(null);
-          }}
-          onConfirm={confirmImport}
-        />
-      )}
-
-      {/* Global Styles for Animations */}
+      {/* GLOBAL STYLES */}
       <style>{`
-        @keyframes slide-down {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        @keyframes slide-up {
-          from {
-            opacity: 0;
-            transform: translateY(100%);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        @keyframes scale-in {
-          from {
-            opacity: 0;
-            transform: translate(-50%, -50%) scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1);
-          }
-        }
-        
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-4px); }
-          75% { transform: translateX(4px); }
-        }
-        
-        .animate-slide-down {
-          animation: slide-down 0.3s ease-out;
-        }
-        
-        .animate-slide-up {
-          animation: slide-up 0.3s ease-out;
-        }
-        
-        .animate-scale-in {
-          animation: scale-in 0.2s ease-out;
-        }
-        
-        .animate-shake {
-          animation: shake 0.3s ease-out;
-        }
-        
-        .safe-area-pb {
-          padding-bottom: env(safe-area-inset-bottom, 0px);
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&display=swap');
+        .font-nunito { font-family: 'Nunito', sans-serif; }
+        .pt-safe-top { padding-top: max(env(safe-area-inset-top), 20px); }
+        .safe-area-top { padding-top: env(safe-area-inset-top); }
+        .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        @keyframes slide-down { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slide-up { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .animate-slide-down { animation: slide-down 0.3s ease-out; }
+        .animate-slide-up { animation: slide-up 0.3s ease-out; }
+        .animate-scale-in { animation: scale-in 0.2s ease-out; }
+        :root { --card-bg: ${COLORS.cream}; --page-bg: #F5F5F5; }
+        .dark { --card-bg: ${COLORS.darkCard}; --page-bg: ${COLORS.darkBg}; }
       `}</style>
     </div>
   );
