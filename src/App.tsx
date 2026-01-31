@@ -81,7 +81,6 @@ const calculateElapsed = (lastMeeting: number | null): { days: number; hours: nu
   
   const elapsed = Date.now() - lastMeeting;
   const totalMinutes = Math.floor(elapsed / 60000);
-  const totalHours = Math.floor(elapsed / 3600000);
   const days = Math.floor(elapsed / 86400000);
   const hours = Math.floor((elapsed % 86400000) / 3600000);
   const minutes = Math.floor((elapsed % 3600000) / 60000);
