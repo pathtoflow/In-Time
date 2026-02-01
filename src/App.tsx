@@ -94,8 +94,6 @@ const COLORS = {
 // ==================== HOURGLASS MASCOT COMPONENT ====================
 
 const HourglassMascot = ({ size = 120, className = '' }: { size?: number; className?: string }) => {
-  const scale = size / 120;
-  
   return (
     <svg 
       width={size} 
