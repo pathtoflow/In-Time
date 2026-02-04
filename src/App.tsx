@@ -768,7 +768,7 @@ export default function App() {
 
   useEffect(() => {
     if (!appState.settings.hasCompletedOnboarding) setCurrentScreen('onboarding');
-  }, []);
+  }, [appState.settings.hasCompletedOnboarding]);
 
   useEffect(() => { localStorage.setItem('in-time-data', JSON.stringify(appState)); }, [appState]);
 
@@ -906,7 +906,6 @@ export default function App() {
   const friendsNeedingAttention = activeFriends.filter(f => getDaysUntilDue(f.lastMeetingDate, f.cadenceDays) <= 3).length;
 
   // Colors based on theme
-  const bgColor = isDark ? COLORS.darkBg : COLORS.lightBg;
   const textColor = isDark ? COLORS.darkText : COLORS.lightText;
   const mutedColor = isDark ? COLORS.darkTextMuted : COLORS.lightTextMuted;
   const cardBg = isDark ? COLORS.darkCard : COLORS.lightCard;
