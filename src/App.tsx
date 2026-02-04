@@ -717,7 +717,6 @@ const DeleteConfirmModal = ({ friend, onClose, onConfirm, isDark }: { friend: Fr
 const ImportConfirmModal = ({ data, onClose, onConfirm, isDark }: { data: DataExport; onClose: () => void; onConfirm: () => void; isDark: boolean }) => {
   const cardBg = isDark ? COLORS.darkCard : COLORS.lightCard;
   const textColor = isDark ? COLORS.darkText : COLORS.lightText;
-  const mutedColor = isDark ? COLORS.darkTextSecondary : COLORS.lightTextSecondary;
   const inputBg = isDark ? COLORS.darkBg : '#F5F5F5';
   const buttonBg = isDark ? COLORS.darkBorder : COLORS.lightBorder;
   
