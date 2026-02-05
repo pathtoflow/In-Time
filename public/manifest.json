@@ -1,7 +1,7 @@
 {
-  "short_name": "RelationTracker",
-  "name": "Relationship Tracker",
-  "description": "Track time between meetings with friends. Never let meaningful connections fade.",
+  "short_name": "In Time",
+  "name": "In Time",
+  "description": "Nurture the relationships that matter most",
   "icons": [
     {
       "src": "icon-192.png",
