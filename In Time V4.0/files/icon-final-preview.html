@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>In Time — Icon Final</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: system-ui, sans-serif;
+    background: #FAF7F2;
+    color: #2D2418;
+    padding: 40px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+  }
+  h2 { font-size: 18px; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: #7A7267; margin-bottom: 16px; }
+  .row { display: flex; gap: 24px; align-items: flex-end; flex-wrap: wrap; justify-content: center; }
+  .wrap {
+    border-radius: 22%;
+    overflow: hidden;
+    box-shadow: 0 2px 16px rgba(45,36,24,0.08);
+  }
+  .label { font-size: 12px; color: #7A7267; text-align: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<h2>Single closed path with narrow waist</h2>
+<p class="sub">One continuous outline — physically impossible to have a seam.</p>
+
+<div class="row">
+  <div>
+    <div class="wrap" style="width:200px;height:200px;">
+      <svg viewBox="0 0 512 512" width="200" height="200">
+        <defs>
+          <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#FBF8F3"/>
+            <stop offset="100%" stop-color="#F0EBE3"/>
+          </linearGradient>
+          <linearGradient id="teal" x1="0.5" y1="0" x2="0.5" y2="1">
+            <stop offset="0%" stop-color="#30C9BA"/>
+            <stop offset="45%" stop-color="#26A69A"/>
+            <stop offset="100%" stop-color="#1E8F82"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" fill="url(#bg)"/>
+        <!--
+          Continuous clockwise trace:
+          Top-left corner → top edge → top-right corner →
+          Right side curves inward to waist →
+          Waist right side (narrow bridge, ~16px wide) →
+          Right side curves outward to bottom-right →
+          Bottom edge → bottom-left corner →
+          Left side curves inward to waist →
+          Waist left side →
+          Left side curves outward to top-left → close
+        -->
+        <path d="
+          M 190 120
+          L 322 120
+          C 334 120, 342 128, 342 140
+          L 342 160
+          C 342 208, 312 244, 276 260
+          L 264 266
+
+          L 264 270
+
+          L 276 276
+          C 312 292, 342 328, 342 376
+          L 342 392
+          C 342 404, 334 412, 322 412
+          L 190 412
+          C 178 412, 170 404, 170 392
+          L 170 376
+          C 170 328, 200 292, 236 276
+          L 248 270
+
+          L 248 266
+
+          L 236 260
+          C 200 244, 170 208, 170 160
+          L 170 140
+          C 170 128, 178 120, 190 120
+          Z
+        " fill="url(#teal)"/>
+      </svg>
+    </div>
+    <div class="label">200px</div>
+  </div>
+
+  <div>
+    <div class="wrap" style="width:120px;height:120px;">
+      <svg viewBox="0 0 512 512" width="120" height="120">
+        <rect width="512" height="512" fill="#FBF8F3"/>
+        <path d="M 190 120 L 322 120 C 334 120, 342 128, 342 140 L 342 160 C 342 208, 312 244, 276 260 L 264 266 L 264 270 L 276 276 C 312 292, 342 328, 342 376 L 342 392 C 342 404, 334 412, 322 412 L 190 412 C 178 412, 170 404, 170 392 L 170 376 C 170 328, 200 292, 236 276 L 248 270 L 248 266 L 236 260 C 200 244, 170 208, 170 160 L 170 140 C 170 128, 178 120, 190 120 Z" fill="#26A69A"/>
+      </svg>
+    </div>
+    <div class="label">120px</div>
+  </div>
+
+  <div>
+    <div class="wrap" style="width:60px;height:60px;">
+      <svg viewBox="0 0 512 512" width="60" height="60">
+        <rect width="512" height="512" fill="#FBF8F3"/>
+        <path d="M 190 120 L 322 120 C 334 120, 342 128, 342 140 L 342 160 C 342 208, 312 244, 276 260 L 264 266 L 264 270 L 276 276 C 312 292, 342 328, 342 376 L 342 392 C 342 404, 334 412, 322 412 L 190 412 C 178 412, 170 404, 170 392 L 170 376 C 170 328, 200 292, 236 276 L 248 270 L 248 266 L 236 260 C 200 244, 170 208, 170 160 L 170 140 C 170 128, 178 120, 190 120 Z" fill="#26A69A"/>
+      </svg>
+    </div>
+    <div class="label">60px</div>
+  </div>
+
+  <div>
+    <div class="wrap" style="width:40px;height:40px;">
+      <svg viewBox="0 0 512 512" width="40" height="40">
+        <rect width="512" height="512" fill="#FBF8F3"/>
+        <path d="M 190 120 L 322 120 C 334 120, 342 128, 342 140 L 342 160 C 342 208, 312 244, 276 260 L 264 266 L 264 270 L 276 276 C 312 292, 342 328, 342 376 L 342 392 C 342 404, 334 412, 322 412 L 190 412 C 178 412, 170 404, 170 392 L 170 376 C 170 328, 200 292, 236 276 L 248 270 L 248 266 L 236 260 C 200 244, 170 208, 170 160 L 170 140 C 170 128, 178 120, 190 120 Z" fill="#26A69A"/>
+      </svg>
+    </div>
+    <div class="label">40px</div>
+  </div>
+
+  <div>
+    <div class="wrap" style="width:24px;height:24px;">
+      <svg viewBox="0 0 512 512" width="24" height="24">
+        <rect width="512" height="512" fill="#FBF8F3"/>
+        <path d="M 190 120 L 322 120 C 334 120, 342 128, 342 140 L 342 160 C 342 208, 312 244, 276 260 L 264 266 L 264 270 L 276 276 C 312 292, 342 328, 342 376 L 342 392 C 342 404, 334 412, 322 412 L 190 412 C 178 412, 170 404, 170 392 L 170 376 C 170 328, 200 292, 236 276 L 248 270 L 248 266 L 236 260 C 200 244, 170 208, 170 160 L 170 140 C 170 128, 178 120, 190 120 Z" fill="#26A69A"/>
+      </svg>
+    </div>
+    <div class="label">24px</div>
+  </div>
+</div>
+
+</body>
+</html>
