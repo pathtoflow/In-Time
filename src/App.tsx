@@ -70,7 +70,7 @@ type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | '
 
 // ==================== CONSTANTS ====================
 
-const APP_VERSION = '3.3.0';
+const APP_VERSION = '4.0.0';
 
 const COLORS = {
   primary: '#26A69A',
@@ -81,30 +81,29 @@ const COLORS = {
   fresh: '#66BB6A',
   approaching: '#FFA726',
   attention: '#EF5350',
-  lightBg: '#FFFFFF',
+  lightBg: '#FAF7F2',
   lightCard: '#FFFFFF',
-  lightText: '#1A1A1A',
-  lightTextSecondary: '#666666',
-  lightTextMuted: '#999999',
-  lightBorder: '#E5E5E5',
-  darkBg: '#0D0D0D',
-  darkCard: '#1A1A1A',
-  darkText: '#FFFFFF',
-  darkTextSecondary: '#AAAAAA',
-  darkTextMuted: '#666666',
-  darkBorder: '#333333',
+  lightText: '#2D2418',
+  lightTextSecondary: '#7A7267',
+  lightTextMuted: '#B5AFA7',
+  lightBorder: '#E8E3DC',
+  darkBg: '#1A1612',
+  darkCard: '#262018',
+  darkText: '#F5F1EB',
+  darkTextSecondary: '#A89E94',
+  darkTextMuted: '#6B6158',
+  darkBorder: '#3D3630',
 };
 
 // Design tokens — single source of truth
 const TOKENS = {
   shadow: {
-    card: (isDark: boolean) => isDark ? '0 2px 12px rgba(0,0,0,0.35)' : '0 2px 12px rgba(0,0,0,0.07)',
+    card: (isDark: boolean) => isDark ? '0 1px 8px rgba(0,0,0,0.3)' : '0 1px 8px rgba(45,36,24,0.06)',
   },
   header: {
     paddingTop: 'pt-3',
-    paddingBottom: 'pb-12',
+    paddingBottom: 'pb-4',
     paddingX: 'px-5',
-    gradient: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
   },
   spacing: {
     screenPadding: 'px-4',
@@ -121,7 +120,7 @@ const getTheme = (isDark: boolean): Theme => ({
   card: isDark ? COLORS.darkCard : COLORS.lightCard,
   bg: isDark ? COLORS.darkBg : COLORS.lightBg,
   border: isDark ? COLORS.darkBorder : COLORS.lightBorder,
-  inputBg: isDark ? COLORS.darkBg : '#F5F5F5',
+  inputBg: isDark ? '#1F1A14' : '#F0ECE5',
   cardShadow: TOKENS.shadow.card(isDark),
   isDark,
 });
@@ -175,11 +174,11 @@ const calculateHealthScore = (friend: Friend, meetings: Meeting[]): number => {
   return Math.round((consistency * 0.4) + (streakStability * 0.3) + (gapScore * 0.2) + multiplierBonus);
 };
 
-const getGreeting = (): string => {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+const getGreeting = (friendCount: number, needsAttention: number): { title: string; subtitle: string } => {
+  if (friendCount === 0) return { title: 'In Time', subtitle: 'Your circle is empty — start with someone you miss.' };
+  if (needsAttention === 0) return { title: 'All in time', subtitle: `${friendCount} connection${friendCount > 1 ? 's' : ''} on track.` };
+  if (needsAttention === 1) return { title: 'One\'s drifting', subtitle: 'A quick catch-up goes a long way.' };
+  return { title: `${needsAttention} drifting`, subtitle: 'Some connections could use your attention.' };
 };
 
 // ==================== CUSTOM HOOKS ====================
@@ -220,45 +219,42 @@ const useDarkMode = (theme: 'auto' | 'light' | 'dark') => {
 
 // ==================== SHARED COMPONENTS ====================
 
-const WaveDivider = ({ isDark }: { isDark: boolean }) => (
-  <svg viewBox="0 0 1440 60" className="w-full h-5 block -mb-px" preserveAspectRatio="none">
-    <path fill={isDark ? COLORS.darkBg : COLORS.lightBg} d="M0,30 C360,60 720,0 1080,30 C1260,45 1380,40 1440,35 L1440,60 L0,60 Z"/>
-  </svg>
-);
-
 const GradientBackground = ({ isDark, children, className = '' }: { isDark: boolean; children: React.ReactNode; className?: string }) => (
   <div
     className={className}
     style={{
       background: isDark
-        ? `linear-gradient(180deg, ${COLORS.darkBg} 0%, #0A1A18 50%, ${COLORS.darkBg} 100%)`
-        : `linear-gradient(180deg, ${COLORS.lightBg} 0%, #E8F5F3 50%, ${COLORS.lightBg} 100%)`
+        ? `linear-gradient(180deg, ${COLORS.darkBg} 0%, #1E1A14 50%, ${COLORS.darkBg} 100%)`
+        : `linear-gradient(180deg, ${COLORS.lightBg} 0%, #F3EEE6 50%, ${COLORS.lightBg} 100%)`
     }}
   >
     {children}
   </div>
 );
 
-// Unified screen header
-const ScreenHeader = ({ title, isDark, rightAction, leftAction }: {
+// Unified screen header — flat, no gradient bar
+const ScreenHeader = ({ title, isDark, rightAction, leftAction, theme }: {
   title: string | React.ReactNode;
   isDark: boolean;
   rightAction?: React.ReactNode;
   leftAction?: React.ReactNode;
-}) => (
-  <div className="relative pt-safe-top" style={{ background: TOKENS.header.gradient }}>
-    <div className={`${TOKENS.header.paddingX} ${TOKENS.header.paddingTop} ${TOKENS.header.paddingBottom}`}>
-      <div className="flex items-center justify-between">
-        {leftAction || <div className="w-9" />}
-        {typeof title === 'string' ? (
-          <h1 className="text-lg font-bold text-white font-nunito">{title}</h1>
-        ) : title}
-        {rightAction || <div className="w-9" />}
+  theme?: Theme;
+}) => {
+  const t = theme || getTheme(isDark);
+  return (
+    <div className="pt-safe-top">
+      <div className={`${TOKENS.header.paddingX} ${TOKENS.header.paddingTop} ${TOKENS.header.paddingBottom}`}>
+        <div className="flex items-center justify-between">
+          {leftAction || <div className="w-9" />}
+          {typeof title === 'string' ? (
+            <h1 className="text-lg font-bold font-nunito" style={{ color: t.text }}>{title}</h1>
+          ) : title}
+          {rightAction || <div className="w-9" />}
+        </div>
       </div>
     </div>
-    <WaveDivider isDark={isDark} />
-  </div>
-);
+  );
+};
 
 // Reusable card wrapper
 const Card = ({ theme, children, className = '', style = {} }: {
@@ -624,16 +620,22 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
 
   return (
     <div
-      className="h-screen flex flex-col"
+      className="h-screen flex flex-col relative overflow-hidden"
       style={{
         background: isDark
-          ? `linear-gradient(180deg, ${COLORS.darkBg} 0%, #0A1A18 50%, ${COLORS.darkBg} 100%)`
-          : `linear-gradient(180deg, ${COLORS.lightBg} 0%, #E8F5F3 50%, ${COLORS.lightBg} 100%)`
+          ? `linear-gradient(180deg, ${COLORS.darkBg} 0%, #1E1A14 50%, ${COLORS.darkBg} 100%)`
+          : `linear-gradient(180deg, ${COLORS.lightBg} 0%, #F3EEE6 50%, ${COLORS.lightBg} 100%)`
       }}
     >
+      {/* Subtle ambient glow */}
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[300px] h-[300px] rounded-full opacity-20 blur-[80px] pointer-events-none"
+        style={{ background: `radial-gradient(circle, ${COLORS.primary} 0%, transparent 70%)` }} />
       {/* Top bar */}
-      <div className={`pt-safe-top ${TOKENS.header.paddingX} ${TOKENS.header.paddingTop} flex justify-end`}>
-        <button onClick={onComplete} className="py-2 px-4 text-sm font-nunito transition-colors"
+      <div className={`pt-safe-top ${TOKENS.header.paddingX} ${TOKENS.header.paddingTop} flex items-center justify-between`}>
+        <div className="text-xs font-semibold font-nunito tracking-wide uppercase" style={{ color: theme.textMuted }}>
+          {step + 1} / {steps.length}
+        </div>
+        <button onClick={onComplete} className="py-2 px-3 text-sm font-nunito transition-colors rounded-lg"
           style={{ color: theme.textMuted }}>
           Skip
         </button>
@@ -1127,25 +1129,41 @@ export default function App() {
         <div className="flex-1 overflow-auto pb-20">
           <ScreenHeader
             isDark={isDark}
+            theme={theme}
             title={
-              <div className="flex-1 ml-2">
-                <h1 className="text-lg font-bold text-white font-nunito">{getGreeting()} ☀️</h1>
-                <p className="text-white/70 text-xs mt-0.5 font-nunito">
-                  {friendsNeedingAttention > 0 ? `${friendsNeedingAttention} to catch up with` : activeFriendCount > 0 ? "All caught up!" : "Add your first friend"}
+              <div className="flex-1 ml-3">
+                <h1 className="text-xl font-bold font-nunito" style={{ color: theme.text }}>{getGreeting(activeFriendCount, friendsNeedingAttention).title}</h1>
+                <p className="text-sm mt-0.5 font-nunito" style={{ color: theme.textMuted }}>
+                  {getGreeting(activeFriendCount, friendsNeedingAttention).subtitle}
                 </p>
               </div>
             }
-            leftAction={<div className="w-9" />}
+            leftAction={
+              activeFriendCount > 0 ? (
+                <div className="relative w-10 h-10 flex-shrink-0">
+                  <svg className="w-full h-full transform -rotate-90">
+                    <circle cx="20" cy="20" r="16" stroke={theme.border} strokeWidth="3" fill="none" />
+                    <circle cx="20" cy="20" r="16" stroke={COLORS.primary} strokeWidth="3" fill="none"
+                      strokeLinecap="round"
+                      strokeDasharray={`${overallHealth * 1.005} 100.5`}
+                      className="transition-all duration-700" />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xs font-bold tabular-nums font-nunito" style={{ color: COLORS.primary }}>{overallHealth}</span>
+                  </div>
+                </div>
+              ) : <div className="w-10" />
+            }
             rightAction={
               <button onClick={() => setCurrentModal('add-friend')} disabled={activeFriendCount >= 10}
-                className="w-10 h-10 rounded-full text-white flex items-center justify-center disabled:opacity-50 transition-all active:scale-95"
-                style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                <Plus className="w-5 h-5" />
+                className="w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-50 transition-all active:scale-95"
+                style={{ backgroundColor: COLORS.primary }}>
+                <Plus className="w-5 h-5 text-white" />
               </button>
             }
           />
 
-          <div className={`${TOKENS.spacing.screenPadding} -mt-1`}>
+          <div className={`${TOKENS.spacing.screenPadding}`}>
             {activeFriendCount === 0 ? (
               <Card theme={theme} className="text-center py-12 mt-4">
                 <div className="text-5xl mb-4 animate-float">⏳</div>
@@ -1229,20 +1247,21 @@ export default function App() {
         <div className="flex-1 overflow-auto pb-28">
           <ScreenHeader
             isDark={isDark}
+            theme={theme}
             title={selectedFriend.name}
             leftAction={
-              <button onClick={() => { setCurrentScreen('home'); setSelectedFriendId(null); }} className="p-2 -ml-2 hover:bg-white/20 rounded-full transition-colors">
-                <ChevronLeft className="w-5 h-5 text-white" />
+              <button onClick={() => { setCurrentScreen('home'); setSelectedFriendId(null); }} className="p-2 -ml-2 rounded-full transition-colors" style={{ color: theme.text }}>
+                <ChevronLeft className="w-5 h-5" />
               </button>
             }
             rightAction={
-              <button onClick={() => setCurrentModal('delete-confirm')} className="p-2 -mr-2 hover:bg-white/20 rounded-full transition-colors">
-                <Trash2 className="w-4 h-4 text-white/70" />
+              <button onClick={() => setCurrentModal('delete-confirm')} className="p-2 -mr-2 rounded-full transition-colors" style={{ color: theme.textMuted }}>
+                <Trash2 className="w-4 h-4" />
               </button>
             }
           />
 
-          <div className={`${TOKENS.spacing.screenPadding} -mt-1`}>
+          <div className={`${TOKENS.spacing.screenPadding}`}>
             <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
               <div className="flex justify-center mb-4">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl font-nunito" style={{ backgroundColor: COLORS.primary }}>
@@ -1325,7 +1344,7 @@ export default function App() {
         <div className="flex-1 overflow-auto pb-20">
           <ScreenHeader isDark={isDark} title="Insights" />
 
-          <div className={`${TOKENS.spacing.screenPadding} -mt-1`}>
+          <div className={`${TOKENS.spacing.screenPadding}`}>
 
             {activeFriends.length === 0 ? (
               <Card theme={theme} className="text-center py-12">
@@ -1558,7 +1577,7 @@ export default function App() {
         <div className="flex-1 overflow-auto pb-20">
           <ScreenHeader isDark={isDark} title="Settings" />
 
-          <div className={`${TOKENS.spacing.screenPadding} -mt-1`}>
+          <div className={`${TOKENS.spacing.screenPadding}`}>
             <Card theme={theme} className={`overflow-hidden ${TOKENS.spacing.cardGap}`}>
               <div className="px-4 py-2.5" style={{ borderBottom: `1px solid ${theme.border}` }}>
                 <h3 className="text-xs font-medium uppercase tracking-wide font-nunito" style={{ color: theme.textMuted }}>Appearance</h3>
