@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Check, Plus, ChevronLeft, ChevronRight, Flame, BarChart3, Settings, Home, Download, Upload, X, Trash2 } from 'lucide-react';
+import { Check, Plus, ChevronLeft, ChevronRight, Flame, BarChart3, Settings, Home, Download, Upload, X, Trash2, TrendingUp, TrendingDown, Award, AlertTriangle, Calendar } from 'lucide-react';
 
 // ==================== TYPES ====================
 
@@ -70,7 +70,7 @@ type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | '
 
 // ==================== CONSTANTS ====================
 
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.3.0';
 
 const COLORS = {
   primary: '#26A69A',
@@ -508,14 +508,115 @@ const FriendCard = ({
 
 // ==================== ONBOARDING ====================
 
+// Decorative visual for Slide 1 — animated timer ring
+const OnboardingTimerVisual = ({ theme }: { theme: Theme }) => (
+  <div className="relative w-36 h-36 mx-auto">
+    <svg className="w-full h-full transform -rotate-90">
+      <circle cx="72" cy="72" r="62" stroke={theme.border} strokeWidth="6" fill="none" />
+      <circle cx="72" cy="72" r="62" strokeWidth="6" fill="none" strokeLinecap="round"
+        strokeDasharray="195 195" className="onboard-dash-draw" style={{ stroke: COLORS.primary }} />
+    </svg>
+    <div className="absolute inset-0 flex flex-col items-center justify-center">
+      <div className="font-nunito font-light tracking-tight" style={{ color: COLORS.primary }}>
+        <span className="text-3xl tabular-nums">14</span>
+        <span className="text-sm mx-0.5" style={{ color: theme.textMuted }}>d</span>
+        <span className="text-3xl tabular-nums">6</span>
+        <span className="text-sm mx-0.5" style={{ color: theme.textMuted }}>h</span>
+      </div>
+    </div>
+  </div>
+);
+
+// Decorative visual for Slide 2 — mini friend cards
+const OnboardingCardsVisual = ({ theme }: { theme: Theme }) => {
+  const people = [
+    { name: 'Sarah', color: COLORS.fresh, days: '3d 12h' },
+    { name: 'James', color: COLORS.approaching, days: '11d 4h' },
+    { name: 'Priya', color: COLORS.primary, days: '1d 8h' },
+  ];
+  return (
+    <div className="w-full max-w-[240px] mx-auto space-y-2">
+      {people.map((p, i) => (
+        <div
+          key={p.name}
+          className="rounded-xl p-3 flex items-center gap-3 onboard-card-enter"
+          style={{
+            backgroundColor: theme.card,
+            boxShadow: theme.cardShadow,
+            borderLeft: `3px solid ${p.color}`,
+            animationDelay: `${i * 0.15}s`,
+          }}
+        >
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold font-nunito flex-shrink-0"
+            style={{ backgroundColor: p.color }}>
+            {p.name[0]}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold font-nunito truncate" style={{ color: theme.text }}>{p.name}</div>
+            <div className="h-1 rounded-full mt-1.5 w-3/4" style={{ backgroundColor: `${p.color}30` }}>
+              <div className="h-full rounded-full" style={{ width: '60%', backgroundColor: p.color }} />
+            </div>
+          </div>
+          <div className="font-nunito tabular-nums text-sm font-semibold flex-shrink-0" style={{ color: p.color }}>{p.days}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Decorative visual for Slide 3 — cadence ring with ticking timer
+const OnboardingCadenceVisual = ({ theme }: { theme: Theme }) => (
+  <div className="relative w-32 h-32 mx-auto">
+    <svg className="w-full h-full transform -rotate-90">
+      <circle cx="64" cy="64" r="56" stroke={theme.border} strokeWidth="5" fill="none" />
+      <circle cx="64" cy="64" r="56" strokeWidth="5" fill="none" strokeLinecap="round"
+        strokeDasharray="352" strokeDashoffset="105" style={{ stroke: COLORS.approaching }} className="transition-all duration-700" />
+    </svg>
+    <div className="absolute inset-0 flex flex-col items-center justify-center">
+      <div className="text-xs font-nunito font-semibold uppercase tracking-wider mb-0.5" style={{ color: COLORS.approaching }}>5d left</div>
+      <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>every 14 days</div>
+    </div>
+  </div>
+);
+
+// Decorative visual for Slide 4 — check mark confirmation
+const OnboardingDoneVisual = ({ theme }: { theme: Theme }) => (
+  <div className="relative w-28 h-28 mx-auto">
+    <div className="w-full h-full rounded-full flex items-center justify-center onboard-pulse-ring"
+      style={{ backgroundColor: `${COLORS.primary}12` }}>
+      <div className="w-20 h-20 rounded-full flex items-center justify-center"
+        style={{ backgroundColor: `${COLORS.primary}20` }}>
+        <Check className="w-10 h-10 onboard-check-pop" style={{ color: COLORS.primary }} />
+      </div>
+    </div>
+  </div>
+);
+
 const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDark: boolean }) => {
   const [step, setStep] = useState(0);
+  const theme = getTheme(isDark);
 
   const steps = [
-    { icon: '⏳', title: 'Welcome to In Time', subtitle: 'Nurture the relationships that matter most', description: 'Life gets busy. In Time helps you stay connected with the people you care about.' },
-    { icon: '👥', title: 'Add your people', subtitle: 'Start with just a few close friends', description: 'Add up to 10 meaningful connections. Quality over quantity.' },
-    { icon: '⏰', title: 'Set your rhythm', subtitle: 'How often do you want to connect?', description: 'Choose a cadence for each friend. We\'ll gently remind you when it\'s time.' },
-    { icon: '✨', title: 'Stay in time', subtitle: 'One tap to log, no pressure', description: 'Quick log meetings from your home screen. Build streaks and flourish.' },
+    {
+      visual: <OnboardingTimerVisual theme={theme} />,
+      title: 'In Time',
+      subtitle: 'Time moves. Friendships don\'t have to.',
+    },
+    {
+      visual: <OnboardingCardsVisual theme={theme} />,
+      title: 'Your circle',
+      subtitle: 'Pick the 10 people you\'d actually notice losing touch with.',
+    },
+    {
+      visual: <OnboardingCadenceVisual theme={theme} />,
+      title: 'Your rhythm',
+      subtitle: 'Set how often you want to see each person. A live timer does the rest.',
+    },
+    {
+      visual: <OnboardingDoneVisual theme={theme} />,
+      title: 'That\'s it',
+      subtitle: 'One tap when you connect. That\'s it.',
+    },
   ];
 
   const currentStep = steps[step];
@@ -524,44 +625,90 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
   return (
     <div
       className="h-screen flex flex-col"
-      style={{ background: TOKENS.header.gradient }}
+      style={{
+        background: isDark
+          ? `linear-gradient(180deg, ${COLORS.darkBg} 0%, #0A1A18 50%, ${COLORS.darkBg} 100%)`
+          : `linear-gradient(180deg, ${COLORS.lightBg} 0%, #E8F5F3 50%, ${COLORS.lightBg} 100%)`
+      }}
     >
+      {/* Top bar */}
       <div className={`pt-safe-top ${TOKENS.header.paddingX} ${TOKENS.header.paddingTop} flex justify-end`}>
-        <button onClick={onComplete} className="py-2 px-4 text-white/70 text-sm font-nunito hover:text-white transition-colors">
+        <button onClick={onComplete} className="py-2 px-4 text-sm font-nunito transition-colors"
+          style={{ color: theme.textMuted }}>
           Skip
         </button>
       </div>
 
+      {/* Content */}
       <div className="flex-1 flex flex-col items-center justify-center px-8">
-        <div className="text-7xl mb-6 animate-float">{currentStep.icon}</div>
-        <h1 className="text-2xl font-bold text-white text-center font-nunito mb-2">{currentStep.title}</h1>
-        <p className="text-base text-white/80 text-center font-nunito mb-3">{currentStep.subtitle}</p>
-        <p className="text-sm text-white/60 text-center font-nunito max-w-xs leading-relaxed">{currentStep.description}</p>
+        {/* Visual — keyed to force re-mount and replay animations on step change */}
+        <div key={step} className="mb-8 w-full onboard-fade-in">
+          {currentStep.visual}
+        </div>
+
+        <h1 key={`t-${step}`} className="text-2xl font-bold text-center font-nunito mb-3 onboard-fade-in"
+          style={{ color: theme.text, animationDelay: '0.1s' }}>
+          {currentStep.title}
+        </h1>
+        <p key={`s-${step}`} className="text-sm text-center font-nunito max-w-[280px] leading-relaxed onboard-fade-in"
+          style={{ color: theme.textSecondary, animationDelay: '0.2s' }}>
+          {currentStep.subtitle}
+        </p>
       </div>
 
+      {/* Bottom controls */}
       <div className={`${TOKENS.header.paddingX} pb-8 safe-area-bottom`}>
         <div className="flex justify-center gap-2 mb-6">
           {steps.map((_, i) => (
-            <div key={i} className={`h-2 rounded-full transition-all duration-300 ${i === step ? 'w-6 bg-white' : 'w-2 bg-white/30'}`} />
+            <div key={i} className="h-2 rounded-full transition-all duration-300"
+              style={{
+                width: i === step ? 24 : 8,
+                backgroundColor: i === step ? COLORS.primary : theme.border,
+              }} />
           ))}
         </div>
 
         <div className="flex gap-3">
           {step > 0 && (
-            <button onClick={() => setStep(s => s - 1)} className="flex-1 py-4 rounded-2xl font-semibold font-nunito bg-white/20 text-white text-sm">
+            <button onClick={() => setStep(s => s - 1)}
+              className="flex-1 py-3.5 rounded-2xl font-semibold font-nunito text-sm transition-colors"
+              style={{ backgroundColor: theme.inputBg, color: theme.text }}>
               Back
             </button>
           )}
           <button
             onClick={() => isLastStep ? onComplete() : setStep(s => s + 1)}
-            className="flex-1 py-4 rounded-2xl font-semibold font-nunito flex items-center justify-center gap-2 text-sm"
-            style={{ backgroundColor: 'white', color: COLORS.primaryDark }}
+            className="flex-1 py-3.5 rounded-2xl font-semibold font-nunito flex items-center justify-center gap-2 text-sm text-white transition-all active:scale-[0.98]"
+            style={{ backgroundColor: COLORS.primary }}
           >
             {isLastStep ? 'Get Started' : 'Next'}
-            {!isLastStep && <ChevronRight className="w-5 h-5" />}
+            {!isLastStep && <ChevronRight className="w-4 h-4" />}
           </button>
         </div>
       </div>
+
+      {/* Onboarding-specific styles (this component returns before global styles) */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap');
+        .font-nunito { font-family: 'Nunito', -apple-system, sans-serif; }
+        .pt-safe-top { padding-top: max(env(safe-area-inset-top), 16px); }
+        .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+        @keyframes onboard-fade { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .onboard-fade-in { animation: onboard-fade 0.4s ease-out both; }
+
+        @keyframes onboard-card-slide { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+        .onboard-card-enter { animation: onboard-card-slide 0.35s ease-out both; }
+
+        @keyframes onboard-dash { from { stroke-dashoffset: 390; } to { stroke-dashoffset: 195; } }
+        .onboard-dash-draw { animation: onboard-dash 1.2s ease-out both; }
+
+        @keyframes onboard-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+        .onboard-pulse-ring { animation: onboard-pulse 2.5s ease-in-out infinite; }
+
+        @keyframes onboard-pop { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+        .onboard-check-pop { animation: onboard-pop 0.4s ease-out 0.15s both; }
+      `}</style>
     </div>
   );
 };
@@ -1179,48 +1326,229 @@ export default function App() {
           <ScreenHeader isDark={isDark} title="Insights" />
 
           <div className={`${TOKENS.spacing.screenPadding} -mt-1`}>
-            <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
-              <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Overall Health</h2>
-              <div className="flex items-center justify-center mb-3">
-                <div className="relative w-28 h-28">
-                  <svg className="transform -rotate-90 w-28 h-28">
-                    <circle cx="56" cy="56" r="48" stroke={theme.border} strokeWidth="8" fill="none" />
-                    <circle cx="56" cy="56" r="48" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${overallHealth * 3.02} 302`} className="transition-all duration-700" style={{ stroke: COLORS.primary }} />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-3xl font-bold font-nunito" style={{ color: theme.text }}>{overallHealth}</span>
-                  </div>
-                </div>
-              </div>
-              <p className="text-center text-xs font-nunito" style={{ color: theme.textMuted }}>{overallHealth >= 80 ? 'Excellent' : overallHealth >= 60 ? 'Good' : overallHealth >= 40 ? 'Needs attention' : 'Getting started'}</p>
-            </Card>
 
-            <Card theme={theme} className="p-5">
-              <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Individual Scores</h2>
-              {activeFriends.length === 0 ? (
-                <div className="text-center py-6">
-                  <div className="text-3xl mb-2">⏳</div>
-                  <div className="text-sm font-nunito" style={{ color: theme.textMuted }}>No friends yet</div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {activeFriends.sort((a, b) => calculateHealthScore(b, appState.meetings) - calculateHealthScore(a, appState.meetings)).map(friend => {
-                    const health = calculateHealthScore(friend, appState.meetings);
-                    return (
-                      <div key={friend.id}>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="font-medium font-nunito" style={{ color: theme.text }}>{friend.name}</span>
-                          <span className="font-semibold tabular-nums font-nunito" style={{ color: theme.text }}>{health}</span>
-                        </div>
-                        <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
-                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${health}%`, backgroundColor: COLORS.primary }} />
+            {activeFriends.length === 0 ? (
+              <Card theme={theme} className="text-center py-12">
+                <div className="text-4xl mb-3">📊</div>
+                <h2 className="text-base font-bold font-nunito mb-1" style={{ color: theme.text }}>No data yet</h2>
+                <p className="text-sm font-nunito" style={{ color: theme.textMuted }}>Add friends and log meetings to see insights.</p>
+              </Card>
+            ) : (() => {
+              // Compute all insights data once
+              const allMeetings = appState.meetings;
+              const now = Date.now();
+
+              // Weekly activity — last 8 weeks
+              const weeklyData: { label: string; count: number }[] = [];
+              for (let i = 7; i >= 0; i--) {
+                const weekStart = now - (i + 1) * 7 * 86400000;
+                const weekEnd = now - i * 7 * 86400000;
+                const count = allMeetings.filter(m => m.timestamp >= weekStart && m.timestamp < weekEnd).length;
+                const d = new Date(weekEnd);
+                weeklyData.push({ label: `${d.getMonth() + 1}/${d.getDate()}`, count });
+              }
+              const maxWeekly = Math.max(...weeklyData.map(w => w.count), 1);
+
+              // Overall stats
+              const totalMeetings = allMeetings.length;
+              const longestStreak = Math.max(...activeFriends.map(f => f.streakCount), 0);
+              const avgAdherence = activeFriends.length > 0
+                ? Math.round(activeFriends.reduce((sum, f) => {
+                    if (!f.lastMeetingDate || f.totalMeetings < 1) return sum + 100;
+                    const elapsed = (now - f.lastMeetingDate) / 86400000;
+                    const ratio = Math.min(1, f.cadenceDays / Math.max(elapsed, 1));
+                    return sum + ratio * 100;
+                  }, 0) / activeFriends.length)
+                : 0;
+
+              // Spotlights
+              const withScores = activeFriends.map(f => ({ friend: f, score: calculateHealthScore(f, allMeetings) }));
+              const strongest = withScores.reduce((best, curr) => curr.score > best.score ? curr : best, withScores[0]);
+              const mostNeglected = activeFriends
+                .filter(f => f.lastMeetingDate !== null)
+                .sort((a, b) => getDaysUntilDue(a.lastMeetingDate, a.cadenceDays) - getDaysUntilDue(b.lastMeetingDate, b.cadenceDays))[0];
+
+              // Trend per friend (compare recent 4 meetings avg gap vs prior 4)
+              const getTrend = (friend: Friend): 'up' | 'down' | 'stable' => {
+                const fm = allMeetings.filter(m => m.friendId === friend.id).sort((a, b) => a.timestamp - b.timestamp);
+                if (fm.length < 5) return 'stable';
+                const gaps = fm.slice(1).map((m, i) => (m.timestamp - fm[i].timestamp) / 86400000);
+                const recent = gaps.slice(-4);
+                const prior = gaps.slice(-8, -4);
+                if (prior.length === 0) return 'stable';
+                const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+                const priorAvg = prior.reduce((a, b) => a + b, 0) / prior.length;
+                const diff = (recentAvg - priorAvg) / priorAvg;
+                if (diff < -0.15) return 'up'; // shorter gaps = improving
+                if (diff > 0.15) return 'down'; // longer gaps = declining
+                return 'stable';
+              };
+
+              // Streak leaderboard (top 5 with streaks)
+              const streakBoard = activeFriends
+                .filter(f => f.streakCount > 0)
+                .sort((a, b) => b.streakCount - a.streakCount)
+                .slice(0, 5);
+
+              return (
+                <>
+                  {/* Overall Health Ring */}
+                  <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
+                    <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Overall Health</h2>
+                    <div className="flex items-center justify-center mb-3">
+                      <div className="relative w-28 h-28">
+                        <svg className="transform -rotate-90 w-28 h-28">
+                          <circle cx="56" cy="56" r="48" stroke={theme.border} strokeWidth="8" fill="none" />
+                          <circle cx="56" cy="56" r="48" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${overallHealth * 3.02} 302`} className="transition-all duration-700" style={{ stroke: COLORS.primary }} />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-3xl font-bold font-nunito" style={{ color: theme.text }}>{overallHealth}</span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
+                    </div>
+                    <p className="text-center text-xs font-nunito" style={{ color: theme.textMuted }}>
+                      {overallHealth >= 80 ? 'Excellent' : overallHealth >= 60 ? 'Good' : overallHealth >= 40 ? 'Needs attention' : 'Getting started'}
+                    </p>
+                  </Card>
+
+                  {/* Stats Row */}
+                  <div className={`grid grid-cols-3 gap-2 ${TOKENS.spacing.sectionGap}`}>
+                    <Card theme={theme} className="p-3 text-center">
+                      <Calendar className="w-4 h-4 mx-auto mb-1" style={{ color: COLORS.primary }} />
+                      <div className="text-lg font-bold tabular-nums font-nunito" style={{ color: theme.text }}>{totalMeetings}</div>
+                      <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>meetings</div>
+                    </Card>
+                    <Card theme={theme} className="p-3 text-center">
+                      <Flame className="w-4 h-4 mx-auto mb-1" style={{ color: COLORS.accent }} />
+                      <div className="text-lg font-bold tabular-nums font-nunito" style={{ color: theme.text }}>{longestStreak}</div>
+                      <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>best streak</div>
+                    </Card>
+                    <Card theme={theme} className="p-3 text-center">
+                      <TrendingUp className="w-4 h-4 mx-auto mb-1" style={{ color: COLORS.fresh }} />
+                      <div className="text-lg font-bold tabular-nums font-nunito" style={{ color: theme.text }}>{avgAdherence}%</div>
+                      <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>on cadence</div>
+                    </Card>
+                  </div>
+
+                  {/* Weekly Activity Chart */}
+                  <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
+                    <h2 className="text-xs font-medium mb-4 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Weekly Activity</h2>
+                    <div className="flex items-end gap-1.5" style={{ height: 80 }}>
+                      {weeklyData.map((week, i) => {
+                        const height = maxWeekly > 0 ? Math.max(4, (week.count / maxWeekly) * 72) : 4;
+                        const isLatest = i === weeklyData.length - 1;
+                        return (
+                          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                            <span className="text-xs tabular-nums font-nunito font-semibold" style={{ color: week.count > 0 ? theme.text : 'transparent', fontSize: 10 }}>
+                              {week.count}
+                            </span>
+                            <div
+                              className="w-full rounded-t-md transition-all duration-500"
+                              style={{
+                                height,
+                                backgroundColor: isLatest ? COLORS.primary : week.count > 0 ? `${COLORS.primary}60` : theme.border,
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-1.5 mt-1.5">
+                      {weeklyData.map((week, i) => (
+                        <div key={i} className="flex-1 text-center">
+                          <span className="font-nunito tabular-nums" style={{ color: theme.textMuted, fontSize: 9 }}>{week.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+
+                  {/* Spotlight Cards */}
+                  {(strongest || mostNeglected) && (
+                    <div className={`grid grid-cols-2 gap-2 ${TOKENS.spacing.sectionGap}`}>
+                      {strongest && (
+                        <Card theme={theme} className="p-3">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Award className="w-3.5 h-3.5" style={{ color: COLORS.fresh }} />
+                            <span className="text-xs font-semibold font-nunito uppercase tracking-wide" style={{ color: COLORS.fresh }}>Strongest</span>
+                          </div>
+                          <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{strongest.friend.name}</div>
+                          <div className="text-xs font-nunito mt-0.5" style={{ color: theme.textMuted }}>Score: {strongest.score}</div>
+                        </Card>
+                      )}
+                      {mostNeglected && (
+                        <Card theme={theme} className="p-3">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <AlertTriangle className="w-3.5 h-3.5" style={{ color: COLORS.attention }} />
+                            <span className="text-xs font-semibold font-nunito uppercase tracking-wide" style={{ color: COLORS.attention }}>Needs love</span>
+                          </div>
+                          <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{mostNeglected.name}</div>
+                          <div className="text-xs font-nunito mt-0.5" style={{ color: theme.textMuted }}>
+                            {getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays) === 0 ? 'Overdue' : `${getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays)}d left`}
+                          </div>
+                        </Card>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Streak Leaderboard */}
+                  {streakBoard.length > 0 && (
+                    <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
+                      <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Streak Leaderboard</h2>
+                      <div className="space-y-2.5">
+                        {streakBoard.map((friend, i) => (
+                          <div key={friend.id} className="flex items-center gap-3">
+                            <span className="text-sm font-bold tabular-nums font-nunito w-5 text-center" style={{ color: i === 0 ? COLORS.accent : theme.textMuted }}>
+                              {i + 1}
+                            </span>
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold font-nunito flex-shrink-0"
+                              style={{ backgroundColor: COLORS.primary }}
+                            >
+                              {friend.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium font-nunito truncate block" style={{ color: theme.text }}>{friend.name}</span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <Flame className="w-3.5 h-3.5" style={{ color: COLORS.accent }} />
+                              <span className="text-sm font-bold tabular-nums font-nunito" style={{ color: COLORS.accent }}>{friend.streakCount}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Individual Scores with Trends */}
+                  <Card theme={theme} className="p-5">
+                    <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Individual Scores</h2>
+                    <div className="space-y-3">
+                      {withScores.sort((a, b) => b.score - a.score).map(({ friend, score }) => {
+                        const trend = getTrend(friend);
+                        return (
+                          <div key={friend.id}>
+                            <div className="flex items-center justify-between text-sm mb-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-medium font-nunito truncate" style={{ color: theme.text }}>{friend.name}</span>
+                                {trend === 'up' && <TrendingUp className="w-3 h-3 flex-shrink-0" style={{ color: COLORS.fresh }} />}
+                                {trend === 'down' && <TrendingDown className="w-3 h-3 flex-shrink-0" style={{ color: COLORS.attention }} />}
+                              </div>
+                              <span className="font-semibold tabular-nums font-nunito flex-shrink-0 ml-2" style={{ color: theme.text }}>{score}</span>
+                            </div>
+                            <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
+                              <div className="h-full rounded-full transition-all duration-700" style={{
+                                width: `${score}%`,
+                                backgroundColor: score >= 70 ? COLORS.fresh : score >= 40 ? COLORS.approaching : COLORS.attention,
+                              }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
