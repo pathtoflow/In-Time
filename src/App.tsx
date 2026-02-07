@@ -70,7 +70,7 @@ type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | '
 
 // ==================== CONSTANTS ====================
 
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '3.1.0';
 
 const COLORS = {
   primary: '#26A69A',
@@ -383,22 +383,49 @@ const TimerCompact = ({ lastMeeting, cadence, theme }: { lastMeeting: number | n
   );
 };
 
+// ==================== HEALTH SCORE MINI RING ====================
+
+const HealthRing = ({ score, size = 32, strokeWidth = 3, theme }: { score: number; size?: number; strokeWidth?: number; theme: Theme }) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (score / 100) * circumference;
+  const scoreColor = score >= 70 ? COLORS.fresh : score >= 40 ? COLORS.approaching : COLORS.attention;
+
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="transform -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={radius} stroke={theme.border} strokeWidth={strokeWidth} fill="none" />
+        <circle cx={size / 2} cy={size / 2} r={radius} stroke={scoreColor} strokeWidth={strokeWidth} fill="none"
+          strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset}
+          className="transition-all duration-700" />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-xs font-bold tabular-nums font-nunito" style={{ color: theme.text, fontSize: size * 0.3 }}>{score}</span>
+      </div>
+    </div>
+  );
+};
+
 // ==================== FRIEND CARD ====================
 
 const FriendCard = ({
   friend,
+  healthScore,
   onTap,
   onQuickLog,
   onDelete,
   theme,
 }: {
   friend: Friend;
+  healthScore: number;
   onTap: () => void;
   onQuickLog: () => void;
   onDelete: () => void;
   theme: Theme;
 }) => {
   const color = getTimerColor(friend.lastMeetingDate, friend.cadenceDays);
+  const daysLeft = getDaysUntilDue(friend.lastMeetingDate, friend.cadenceDays);
+  const isOverdue = daysLeft === 0 && friend.lastMeetingDate !== null;
 
   return (
     <div
@@ -410,9 +437,10 @@ const FriendCard = ({
       }}
     >
       <div className="p-4 cursor-pointer" onClick={onTap}>
+        {/* Row 1: Avatar + Name/Meta + Health Ring */}
         <div className="flex items-center gap-3">
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-lg font-nunito flex-shrink-0"
+            className="w-11 h-11 rounded-full flex items-center justify-center text-white font-semibold text-base font-nunito flex-shrink-0"
             style={{ backgroundColor: color }}
           >
             {friend.name.charAt(0).toUpperCase()}
@@ -420,11 +448,11 @@ const FriendCard = ({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-semibold font-nunito truncate" style={{ color: theme.text }}>{friend.name}</span>
+              <span className="font-semibold font-nunito truncate text-sm" style={{ color: theme.text }}>{friend.name}</span>
               {friend.streakCount > 0 && (
-                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${COLORS.accent}20` }}>
+                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${COLORS.accent}15` }}>
                   <Flame className="w-3 h-3" style={{ color: COLORS.accent }} />
-                  <span className="text-xs font-semibold font-nunito" style={{ color: COLORS.accent }}>{friend.streakCount}</span>
+                  <span className="text-xs font-bold font-nunito" style={{ color: COLORS.accent }}>{friend.streakCount}</span>
                 </div>
               )}
             </div>
@@ -433,18 +461,31 @@ const FriendCard = ({
             </div>
           </div>
 
-          <div className="text-right flex-shrink-0">
-            <TimerCompact lastMeeting={friend.lastMeetingDate} cadence={friend.cadenceDays} theme={theme} />
+          <HealthRing score={healthScore} theme={theme} />
+        </div>
+
+        {/* Row 2: Timer + Days Left Badge */}
+        <div className="flex items-end justify-between mt-3">
+          <TimerCompact lastMeeting={friend.lastMeetingDate} cadence={friend.cadenceDays} theme={theme} />
+          <div
+            className="px-2 py-0.5 rounded-full text-xs font-semibold font-nunito"
+            style={{
+              backgroundColor: `${color}18`,
+              color: color,
+            }}
+          >
+            {!friend.lastMeetingDate ? 'new' : isOverdue ? 'overdue' : `${daysLeft}d left`}
           </div>
         </div>
 
+        {/* Row 3: Progress Bar */}
         <ProgressBar lastMeeting={friend.lastMeetingDate} cadence={friend.cadenceDays} compact theme={theme} />
       </div>
 
       <div className="flex" style={{ borderTop: `1px solid ${theme.border}` }}>
         <button
           onClick={(e) => { e.stopPropagation(); onQuickLog(); }}
-          className="flex-1 py-3 flex items-center justify-center gap-2 text-sm font-medium font-nunito transition-colors"
+          className="flex-1 py-2.5 flex items-center justify-center gap-2 text-sm font-medium font-nunito transition-colors"
           style={{ color: COLORS.primary }}
         >
           <Check className="w-4 h-4" />
@@ -455,7 +496,7 @@ const FriendCard = ({
 
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="px-6 py-3 flex items-center justify-center text-sm font-medium font-nunito transition-colors"
+          className="px-6 py-2.5 flex items-center justify-center text-sm font-medium font-nunito transition-colors"
           style={{ color: COLORS.attention }}
         >
           <Trash2 className="w-4 h-4" />
@@ -959,23 +1000,77 @@ export default function App() {
 
           <div className={`${TOKENS.spacing.screenPadding} -mt-1`}>
             {activeFriendCount === 0 ? (
-              <div className="text-center py-16">
-                <div className="text-6xl mb-4">⏳</div>
-                <h2 className="text-lg font-bold mb-1 font-nunito" style={{ color: theme.text }}>Add your first friend</h2>
-                <p className="text-sm max-w-xs mx-auto font-nunito" style={{ color: theme.textMuted }}>Tap the + button to start tracking meaningful connections</p>
-              </div>
+              <Card theme={theme} className="text-center py-12 mt-4">
+                <div className="text-5xl mb-4 animate-float">⏳</div>
+                <h2 className="text-lg font-bold mb-2 font-nunito" style={{ color: theme.text }}>No connections yet</h2>
+                <p className="text-sm max-w-[240px] mx-auto font-nunito leading-relaxed" style={{ color: theme.textMuted }}>
+                  Add up to 10 people you want to stay connected with. We'll help you keep track.
+                </p>
+                <button
+                  onClick={() => setCurrentModal('add-friend')}
+                  className="mt-5 px-6 py-2.5 rounded-xl text-white text-sm font-semibold font-nunito inline-flex items-center gap-2 transition-all active:scale-95"
+                  style={{ backgroundColor: COLORS.primary }}
+                >
+                  <Plus className="w-4 h-4" />Add First Friend
+                </button>
+              </Card>
             ) : (
               <div>
-                {activeFriends.map(friend => (
-                  <FriendCard
-                    key={friend.id}
-                    friend={friend}
-                    onTap={() => { setSelectedFriendId(friend.id); setCurrentScreen('friend-detail'); }}
-                    onQuickLog={() => handleQuickLogRequest(friend.id)}
-                    onDelete={() => { setSelectedFriendId(friend.id); setCurrentModal('delete-confirm'); }}
-                    theme={theme}
-                  />
-                ))}
+                {/* Overdue / Needs Attention Section */}
+                {(() => {
+                  const overdue = activeFriends.filter(f => getDaysUntilDue(f.lastMeetingDate, f.cadenceDays) <= 3 && f.lastMeetingDate !== null);
+                  const onTrack = activeFriends.filter(f => !overdue.includes(f));
+
+                  return (
+                    <>
+                      {overdue.length > 0 && (
+                        <div className="mb-2">
+                          <div className="flex items-center gap-2 mb-2 mt-1">
+                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.attention }} />
+                            <span className="text-xs font-semibold uppercase tracking-wider font-nunito" style={{ color: COLORS.attention }}>
+                              Needs attention · {overdue.length}
+                            </span>
+                          </div>
+                          {overdue.map(friend => (
+                            <FriendCard
+                              key={friend.id}
+                              friend={friend}
+                              healthScore={calculateHealthScore(friend, appState.meetings)}
+                              onTap={() => { setSelectedFriendId(friend.id); setCurrentScreen('friend-detail'); }}
+                              onQuickLog={() => handleQuickLogRequest(friend.id)}
+                              onDelete={() => { setSelectedFriendId(friend.id); setCurrentModal('delete-confirm'); }}
+                              theme={theme}
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {onTrack.length > 0 && (
+                        <div className="mb-2">
+                          {overdue.length > 0 && (
+                            <div className="flex items-center gap-2 mb-2 mt-1">
+                              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.fresh }} />
+                              <span className="text-xs font-semibold uppercase tracking-wider font-nunito" style={{ color: COLORS.fresh }}>
+                                On track · {onTrack.length}
+                              </span>
+                            </div>
+                          )}
+                          {onTrack.map(friend => (
+                            <FriendCard
+                              key={friend.id}
+                              friend={friend}
+                              healthScore={calculateHealthScore(friend, appState.meetings)}
+                              onTap={() => { setSelectedFriendId(friend.id); setCurrentScreen('friend-detail'); }}
+                              onQuickLog={() => handleQuickLogRequest(friend.id)}
+                              onDelete={() => { setSelectedFriendId(friend.id); setCurrentModal('delete-confirm'); }}
+                              theme={theme}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
           </div>
