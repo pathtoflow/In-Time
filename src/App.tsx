@@ -616,7 +616,7 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
     {
       visual: <OnboardingTimerVisual theme={theme} />,
       title: 'In Time',
-      subtitle: 'Time moves. Friendships don\'t have to.',
+      subtitle: 'As Time moves forward, your connections can stay grounded through deliberate care.',
     },
     {
       visual: <OnboardingCardsVisual theme={theme} />,
@@ -631,7 +631,7 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
     {
       visual: <OnboardingDoneVisual theme={theme} />,
       title: 'That\'s it',
-      subtitle: 'One tap when you connect. That\'s it.',
+      subtitle: 'One tap when you connect. Stay In Time.',
     },
   ];
 
