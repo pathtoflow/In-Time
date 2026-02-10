@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Check, Plus, ChevronLeft, ChevronRight, Flame, BarChart3, Settings, Home, Download, Upload, X, Trash2, TrendingUp, TrendingDown, Award, AlertTriangle, Calendar } from 'lucide-react';
+import { Check, Plus, ChevronLeft, ChevronRight, Flame, BarChart3, Settings, Home, Download, Upload, X, Trash2, TrendingUp, TrendingDown, Award, AlertTriangle, Calendar, Edit3 } from 'lucide-react';
 
 // ==================== TYPES ====================
 
@@ -43,6 +43,7 @@ interface Toast {
   id: string;
   message: string;
   type: 'success' | 'warning' | 'error' | 'info';
+  action?: { label: string; onAction: () => void };
 }
 
 interface DataExport {
@@ -70,7 +71,7 @@ type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | '
 
 // ==================== CONSTANTS ====================
 
-const APP_VERSION = '4.1.0';
+const APP_VERSION = '4.2.0';
 
 // App icon — single continuous hourglass path (viewBox 0 0 512 512)
 const HOURGLASS_PATH = 'M 190 120 L 322 120 C 334 120, 342 128, 342 140 L 342 160 C 342 208, 312 244, 276 260 L 264 266 L 264 270 L 276 276 C 312 292, 342 328, 342 376 L 342 392 C 342 404, 334 412, 322 412 L 190 412 C 178 412, 170 404, 170 392 L 170 376 C 170 328, 200 292, 236 276 L 248 270 L 248 266 L 236 260 C 200 244, 170 208, 170 160 L 170 140 C 170 128, 178 120, 190 120 Z';
@@ -90,8 +91,8 @@ const COLORS = {
   lightTextSecondary: '#7A7267',
   lightTextMuted: '#B5AFA7',
   lightBorder: '#E8E3DC',
-  darkBg: '#1A1612',
-  darkCard: '#262018',
+  darkBg: '#151210',
+  darkCard: '#2A2318',
   darkText: '#F5F1EB',
   darkTextSecondary: '#A89E94',
   darkTextMuted: '#6B6158',
@@ -130,7 +131,7 @@ const getTheme = (isDark: boolean): Theme => ({
 
 // ==================== UTILITY FUNCTIONS ====================
 
-const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+const generateId = () => crypto.randomUUID();
 
 const calculateElapsed = (lastMeeting: number | null): { days: number; hours: number; minutes: number } => {
   if (!lastMeeting) return { days: 0, hours: 0, minutes: 0 };
@@ -155,7 +156,7 @@ const getDaysUntilDue = (lastMeeting: number | null, cadence: number): number =>
   if (!lastMeeting) return cadence;
   const elapsed = Date.now() - lastMeeting;
   const daysElapsed = elapsed / 86400000;
-  return Math.max(0, Math.ceil(cadence - daysElapsed));
+  return Math.ceil(cadence - daysElapsed);  // negative = overdue
 };
 
 const calculateHealthScore = (friend: Friend, meetings: Meeting[]): number => {
@@ -280,10 +281,8 @@ const Card = ({ theme, children, className = '', style = {} }: {
 
 const ToastContainer = ({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) => {
   useEffect(() => {
-    toasts.forEach(toast => {
-      const timer = setTimeout(() => onDismiss(toast.id), 3000);
-      return () => clearTimeout(timer);
-    });
+    const timers = toasts.map(toast => setTimeout(() => onDismiss(toast.id), toast.action ? 5000 : 3000));
+    return () => timers.forEach(clearTimeout);
   }, [toasts, onDismiss]);
 
   return (
@@ -293,10 +292,16 @@ const ToastContainer = ({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
           key={toast.id}
           className="px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3 pointer-events-auto animate-slide-down"
           style={{ backgroundColor: COLORS.primary }}
-          onClick={() => onDismiss(toast.id)}
+          onClick={() => !toast.action && onDismiss(toast.id)}
         >
           <Check className="w-5 h-5 flex-shrink-0 text-white" />
-          <span className="text-sm font-medium font-nunito text-white">{toast.message}</span>
+          <span className="text-sm font-medium font-nunito text-white flex-1">{toast.message}</span>
+          {toast.action && (
+            <button onClick={(e) => { e.stopPropagation(); toast.action!.onAction(); onDismiss(toast.id); }}
+              className="text-sm font-bold font-nunito underline text-white ml-2 flex-shrink-0">
+              {toast.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>
@@ -356,7 +361,7 @@ const ProgressBar = ({ lastMeeting, cadence, compact = false, theme }: { lastMee
       {!compact && (
         <div className="flex justify-between mt-1.5 text-xs font-nunito" style={{ color: theme.textMuted }}>
           <span className="tabular-nums">{Math.round(percentage)}%</span>
-          <span className="tabular-nums">{daysUntil > 0 ? `${daysUntil}d left` : 'overdue'}</span>
+          <span className="tabular-nums">{daysUntil > 0 ? `${daysUntil}d left` : daysUntil === 0 ? 'due today' : 'overdue'}</span>
         </div>
       )}
     </div>
@@ -424,7 +429,8 @@ const FriendCard = ({
 }) => {
   const color = getTimerColor(friend.lastMeetingDate, friend.cadenceDays);
   const daysLeft = getDaysUntilDue(friend.lastMeetingDate, friend.cadenceDays);
-  const isOverdue = daysLeft === 0 && friend.lastMeetingDate !== null;
+  const isOverdue = daysLeft < 0 && friend.lastMeetingDate !== null;
+  const isDueToday = daysLeft === 0 && friend.lastMeetingDate !== null;
 
   return (
     <div
@@ -473,7 +479,7 @@ const FriendCard = ({
               color: color,
             }}
           >
-            {!friend.lastMeetingDate ? 'new' : isOverdue ? 'overdue' : `${daysLeft}d left`}
+            {!friend.lastMeetingDate ? 'new' : isOverdue ? 'overdue' : isDueToday ? 'due today' : `${daysLeft}d left`}
           </div>
         </div>
 
@@ -770,7 +776,7 @@ const AddEditFriendModal = ({ friend, onClose, onSave, friendCount, theme }: { f
     const value = e.target.value;
     setCadenceInput(value);
     const numValue = parseInt(value, 10);
-    if (!isNaN(numValue) && numValue >= 1) setCadence(numValue);
+    if (!isNaN(numValue) && numValue >= 1 && numValue <= 365) setCadence(numValue);
   };
 
   const handleCadenceInputBlur = () => {
@@ -778,8 +784,9 @@ const AddEditFriendModal = ({ friend, onClose, onSave, friendCount, theme }: { f
     if (isNaN(numValue) || numValue < 1) {
       setCadenceInput(String(cadence));
     } else {
-      setCadence(numValue);
-      setCadenceInput(String(numValue));
+      const clamped = Math.min(365, numValue);
+      setCadence(clamped);
+      setCadenceInput(String(clamped));
     }
   };
 
@@ -973,6 +980,10 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [importData, setImportData] = useState<DataExport | null>(null);
   const [quickLogFriendId, setQuickLogFriendId] = useState<string | null>(null);
+  const [historyLimit, setHistoryLimit] = useState(10);
+
+  // Reset history pagination when switching friends
+  useEffect(() => { setHistoryLimit(10); }, [selectedFriendId]);
 
   const [appState, setAppState] = useState<AppState>(() => {
     const saved = localStorage.getItem('in-time-data');
@@ -993,11 +1004,14 @@ export default function App() {
     if (!appState.settings.hasCompletedOnboarding) setCurrentScreen('onboarding');
   }, [appState.settings.hasCompletedOnboarding]);
 
-  useEffect(() => { localStorage.setItem('in-time-data', JSON.stringify(appState)); }, [appState]);
+  useEffect(() => {
+    try { localStorage.setItem('in-time-data', JSON.stringify(appState)); }
+    catch { /* storage full or unavailable — state persists in memory only */ }
+  }, [appState]);
 
-  const showToast = useCallback((message: string, type: Toast['type'] = 'success') => {
+  const showToast = useCallback((message: string, type: Toast['type'] = 'success', action?: Toast['action']) => {
     const id = generateId();
-    setToasts(prev => [...prev, { id, message, type }]);
+    setToasts(prev => [...prev, { id, message, type, action }]);
   }, []);
 
   const dismissToast = useCallback((id: string) => { setToasts(prev => prev.filter(t => t.id !== id)); }, []);
@@ -1021,12 +1035,16 @@ export default function App() {
   const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('File too large (5MB max)', 'error'); event.target.value = ''; return; }
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string) as DataExport;
-        if (!data.friends || !data.meetings || !data.settings) { showToast('Invalid file', 'error'); return; }
-        setImportData(data); setCurrentModal('import-confirm');
+        const data = JSON.parse(e.target?.result as string);
+        if (!Array.isArray(data?.friends) || !Array.isArray(data?.meetings) || !data?.settings) { showToast('Invalid file format', 'error'); return; }
+        const validFriends = data.friends.every((f: any) => typeof f?.id === 'string' && typeof f?.name === 'string' && typeof f?.cadenceDays === 'number' && f.cadenceDays > 0);
+        const validMeetings = data.meetings.every((m: any) => typeof m?.id === 'string' && typeof m?.friendId === 'string' && typeof m?.timestamp === 'number');
+        if (!validFriends || !validMeetings) { showToast('Corrupted data in file', 'error'); return; }
+        setImportData(data as DataExport); setCurrentModal('import-confirm');
       } catch { showToast('Could not read file', 'error'); }
     };
     reader.readAsText(file);
@@ -1115,9 +1133,23 @@ export default function App() {
     if (!selectedFriendId) return;
     const friend = appState.friends.find(f => f.id === selectedFriendId);
     if (!friend) return;
+    const deletedMeetings = appState.meetings.filter(m => m.friendId === selectedFriendId);
+
+    // Remove immediately from state
     setAppState(prev => ({ ...prev, friends: prev.friends.filter(f => f.id !== selectedFriendId), meetings: prev.meetings.filter(m => m.friendId !== selectedFriendId) }));
     setCurrentModal(null); setCurrentScreen('home'); setSelectedFriendId(null);
-    showToast(`${friend.name} removed`);
+
+    // Show undo toast
+    showToast(`${friend.name} removed`, 'success', {
+      label: 'Undo',
+      onAction: () => {
+        setAppState(prev => ({
+          ...prev,
+          friends: [...prev.friends, friend],
+          meetings: [...prev.meetings, ...deletedMeetings],
+        }));
+      }
+    });
   };
 
   const selectedFriend = selectedFriendId ? appState.friends.find(f => f.id === selectedFriendId) : null;
@@ -1137,7 +1169,7 @@ export default function App() {
 
       {/* HOME SCREEN */}
       {currentScreen === 'home' && (
-        <div className="flex-1 overflow-auto pb-20">
+        <div className="flex-1 overflow-auto pb-20 animate-screen-enter">
           <ScreenHeader
             isDark={isDark}
             theme={theme}
@@ -1189,6 +1221,11 @@ export default function App() {
                 >
                   <Plus className="w-4 h-4" />Add First Friend
                 </button>
+                <label className="mt-3 px-6 py-2.5 rounded-xl text-sm font-medium font-nunito inline-flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+                  style={{ color: COLORS.primary, backgroundColor: `${COLORS.primary}10` }}>
+                  <Upload className="w-4 h-4" />Import Data
+                  <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
+                </label>
               </Card>
             ) : (
               <div>
@@ -1255,7 +1292,7 @@ export default function App() {
 
       {/* FRIEND DETAIL SCREEN */}
       {currentScreen === 'friend-detail' && selectedFriend && (
-        <div className="flex-1 overflow-auto pb-28">
+        <div className="flex-1 overflow-auto pb-28 animate-screen-slide">
           <ScreenHeader
             isDark={isDark}
             theme={theme}
@@ -1266,9 +1303,14 @@ export default function App() {
               </button>
             }
             rightAction={
-              <button onClick={() => setCurrentModal('delete-confirm')} className="p-2 -mr-2 rounded-full transition-colors" style={{ color: theme.textMuted }}>
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setCurrentModal('edit-friend')} className="p-2 rounded-full transition-colors" style={{ color: theme.textMuted }}>
+                  <Edit3 className="w-4 h-4" />
+                </button>
+                <button onClick={() => setCurrentModal('delete-confirm')} className="p-2 -mr-2 rounded-full transition-colors" style={{ color: theme.textMuted }}>
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             }
           />
 
@@ -1321,7 +1363,7 @@ export default function App() {
                   </Card>
                 ) : (
                   <div className="space-y-2">
-                    {friendMeetings.slice(0, 10).map(meeting => (
+                    {friendMeetings.slice(0, historyLimit).map(meeting => (
                       <Card theme={theme} key={meeting.id} className="p-3">
                         <div className="flex justify-between items-start">
                           <div className="font-medium text-sm font-nunito" style={{ color: theme.text }}>
@@ -1334,6 +1376,13 @@ export default function App() {
                         {meeting.note && <div className="text-xs font-nunito mt-1" style={{ color: theme.textMuted }}>{meeting.note}</div>}
                       </Card>
                     ))}
+                    {friendMeetings.length > historyLimit && (
+                      <button onClick={() => setHistoryLimit(prev => prev + 10)}
+                        className="w-full py-2.5 text-sm font-medium font-nunito rounded-xl transition-colors"
+                        style={{ color: COLORS.primary, backgroundColor: `${COLORS.primary}10` }}>
+                        Show more ({friendMeetings.length - historyLimit} remaining)
+                      </button>
+                    )}
                   </div>
                 );
               })()}
@@ -1352,7 +1401,7 @@ export default function App() {
 
       {/* INSIGHTS SCREEN */}
       {currentScreen === 'insights' && (
-        <div className="flex-1 overflow-auto pb-20">
+        <div className="flex-1 overflow-auto pb-20 animate-screen-enter">
           <ScreenHeader isDark={isDark} title="Insights" />
 
           <div className={`${TOKENS.spacing.screenPadding}`}>
@@ -1362,6 +1411,12 @@ export default function App() {
                 <div className="text-4xl mb-3">📊</div>
                 <h2 className="text-base font-bold font-nunito mb-1" style={{ color: theme.text }}>No data yet</h2>
                 <p className="text-sm font-nunito" style={{ color: theme.textMuted }}>Add friends and log meetings to see insights.</p>
+              </Card>
+            ) : appState.meetings.length < 3 ? (
+              <Card theme={theme} className="text-center py-12">
+                <div className="text-4xl mb-3">📊</div>
+                <h2 className="text-base font-bold font-nunito mb-1" style={{ color: theme.text }}>Almost there</h2>
+                <p className="text-sm font-nunito" style={{ color: theme.textMuted }}>Log a few more meetings to unlock insights. ({appState.meetings.length}/3)</p>
               </Card>
             ) : (() => {
               // Compute all insights data once
@@ -1513,7 +1568,7 @@ export default function App() {
                           </div>
                           <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{mostNeglected.name}</div>
                           <div className="text-xs font-nunito mt-0.5" style={{ color: theme.textMuted }}>
-                            {getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays) === 0 ? 'Overdue' : `${getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays)}d left`}
+                            {getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays) < 0 ? 'Overdue' : getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays) === 0 ? 'Due today' : `${getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays)}d left`}
                           </div>
                         </Card>
                       )}
@@ -1585,7 +1640,7 @@ export default function App() {
 
       {/* SETTINGS SCREEN */}
       {currentScreen === 'settings' && (
-        <div className="flex-1 overflow-auto pb-20">
+        <div className="flex-1 overflow-auto pb-20 animate-screen-enter">
           <ScreenHeader isDark={isDark} title="Settings" />
 
           <div className={`${TOKENS.spacing.screenPadding}`}>
@@ -1635,9 +1690,12 @@ export default function App() {
       <div className="fixed bottom-0 left-0 right-0 safe-area-bottom" style={{ backgroundColor: theme.card, borderTop: `1px solid ${theme.border}` }}>
         <div className="flex justify-around py-1.5">
           {[{ screen: 'home' as const, icon: Home, label: 'Home' }, { screen: 'insights' as const, icon: BarChart3, label: 'Insights' }, { screen: 'settings' as const, icon: Settings, label: 'Settings' }].map(({ screen, icon: Icon, label }) => (
-            <button key={screen} onClick={() => setCurrentScreen(screen)} className="flex flex-col items-center gap-0.5 px-5 py-1.5 rounded-lg transition-all">
+            <button key={screen} onClick={() => setCurrentScreen(screen)} className="flex flex-col items-center gap-0.5 px-5 py-1.5 rounded-lg transition-all relative">
               <Icon className="w-5 h-5" style={{ color: currentScreen === screen ? COLORS.primary : theme.textMuted }} />
               <span className="text-xs font-medium font-nunito" style={{ color: currentScreen === screen ? COLORS.primary : theme.textMuted }}>{label}</span>
+              {currentScreen === screen && (
+                <div className="absolute -bottom-0.5 w-5 h-0.5 rounded-full" style={{ backgroundColor: COLORS.primary }} />
+              )}
             </button>
           ))}
         </div>
@@ -1670,10 +1728,14 @@ export default function App() {
         @keyframes slide-up { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: translateY(0); } }
         @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes screen-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes screen-slide-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
         .animate-slide-down { animation: slide-down 0.25s ease-out; }
         .animate-slide-up { animation: slide-up 0.3s ease-out; }
         .animate-scale-in { animation: scale-in 0.2s ease-out; }
         .animate-float { animation: float 3s ease-in-out infinite; }
+        .animate-screen-enter { animation: screen-enter 0.25s ease-out; }
+        .animate-screen-slide { animation: screen-slide-in 0.25s ease-out; }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
       `}</style>
