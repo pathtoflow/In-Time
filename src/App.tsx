@@ -67,11 +67,11 @@ interface Theme {
 }
 
 type Screen = 'onboarding' | 'home' | 'friend-detail' | 'insights' | 'settings';
-type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | 'delete-confirm' | 'quick-log-confirm' | null;
+type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | 'delete-confirm' | 'quick-log-confirm' | 'reset-confirm' | null;
 
 // ==================== CONSTANTS ====================
 
-const APP_VERSION = '4.2.0';
+const APP_VERSION = '4.3.0';
 
 // App icon — single continuous hourglass path (viewBox 0 0 512 512)
 const HOURGLASS_PATH = 'M 190 120 L 322 120 C 334 120, 342 128, 342 140 L 342 160 C 342 208, 312 244, 276 260 L 264 266 L 264 270 L 276 276 C 312 292, 342 328, 342 376 L 342 392 C 342 404, 334 412, 322 412 L 190 412 C 178 412, 170 404, 170 392 L 170 376 C 170 328, 200 292, 236 276 L 248 270 L 248 266 L 236 260 C 200 244, 170 208, 170 160 L 170 140 C 170 128, 178 120, 190 120 Z';
@@ -180,7 +180,14 @@ const calculateHealthScore = (friend: Friend, meetings: Meeting[]): number => {
 
 const getGreeting = (friendCount: number, needsAttention: number): { title: string; subtitle: string } => {
   if (friendCount === 0) return { title: 'In Time', subtitle: 'Your circle is empty — start with someone you miss.' };
-  if (needsAttention === 0) return { title: 'All in time', subtitle: `${friendCount} connection${friendCount > 1 ? 's' : ''} on track.` };
+  if (needsAttention === 0) {
+    const variants = [
+      { title: 'All in time', subtitle: `${friendCount} connection${friendCount > 1 ? 's' : ''} on track.` },
+      { title: 'Everyone\'s close', subtitle: 'Your circle is in good shape.' },
+      { title: 'Nothing to worry about', subtitle: 'All connections are on cadence.' },
+    ];
+    return variants[Math.floor(Date.now() / 86400000) % variants.length];
+  }
   if (needsAttention === 1) return { title: 'One\'s drifting', subtitle: 'A quick catch-up goes a long way.' };
   return { title: `${needsAttention} drifting`, subtitle: 'Some connections could use your attention.' };
 };
@@ -322,7 +329,7 @@ const TimerDisplay = ({ lastMeeting, cadence, size = 'normal', theme }: { lastMe
         <div className={`${isLarge ? 'text-3xl' : 'text-2xl'} font-light font-nunito`} style={{ color: theme.textMuted }}>
           No meetings yet
         </div>
-        <div className="text-xs mt-1 font-nunito" style={{ color: theme.textMuted }}>tap to log your first</div>
+        <div className="text-xs mt-1 font-nunito" style={{ color: theme.textMuted }}>start the clock</div>
       </div>
     );
   }
@@ -538,8 +545,26 @@ const AppIcon = ({ size = 120, withBackground = true, isDark = false }: { size?:
 );
 
 const OnboardingTimerVisual = ({ theme }: { theme: Theme }) => (
-  <div className="mx-auto onboard-pulse-ring" style={{ width: 140, height: 140 }}>
-    <AppIcon size={140} withBackground={true} />
+  <div className="relative mx-auto" style={{ width: 200, height: 120 }}>
+    {/* Left avatar */}
+    <div className="absolute left-2 top-1/2 -translate-y-1/2 w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-bold font-nunito onboard-fade-in"
+      style={{ backgroundColor: COLORS.fresh }}>A</div>
+    {/* Right avatar */}
+    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-bold font-nunito onboard-fade-in"
+      style={{ backgroundColor: COLORS.primary, animationDelay: '0.15s' }}>B</div>
+    {/* Pulsing connection line */}
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 onboard-fade-in" style={{ animationDelay: '0.3s' }}>
+      <svg width="72" height="24" viewBox="0 0 72 24">
+        <line x1="0" y1="12" x2="72" y2="12" stroke={theme.border} strokeWidth="2" strokeDasharray="4 4" />
+        <line x1="0" y1="12" x2="72" y2="12" stroke={COLORS.primary} strokeWidth="2" strokeDasharray="4 4" className="onboard-line-draw" />
+      </svg>
+    </div>
+    {/* Counter between */}
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-4 onboard-fade-in" style={{ animationDelay: '0.5s' }}>
+      <div className="text-xs font-nunito tabular-nums font-semibold px-2 py-0.5 rounded-full" style={{ color: COLORS.primary, backgroundColor: `${COLORS.primary}15` }}>
+        3d 14h
+      </div>
+    </div>
   </div>
 );
 
@@ -595,15 +620,25 @@ const OnboardingCadenceVisual = ({ theme }: { theme: Theme }) => (
   </div>
 );
 
-// Decorative visual for Slide 4 — check mark confirmation
+// Decorative visual for Slide 4 — quick-log tap animation
 const OnboardingDoneVisual = ({ theme }: { theme: Theme }) => (
-  <div className="relative w-28 h-28 mx-auto">
-    <div className="w-full h-full rounded-full flex items-center justify-center onboard-pulse-ring"
-      style={{ backgroundColor: `${COLORS.primary}12` }}>
-      <div className="w-20 h-20 rounded-full flex items-center justify-center"
-        style={{ backgroundColor: `${COLORS.primary}20` }}>
-        <Check className="w-10 h-10 onboard-check-pop" style={{ color: COLORS.primary }} />
+  <div className="w-full max-w-[220px] mx-auto">
+    <div className="rounded-xl p-3 flex items-center gap-3 onboard-card-enter"
+      style={{ backgroundColor: theme.card, boxShadow: theme.cardShadow, borderLeft: `3px solid ${COLORS.fresh}` }}>
+      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold font-nunito flex-shrink-0"
+        style={{ backgroundColor: COLORS.fresh }}>S</div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold font-nunito" style={{ color: theme.text }}>Sarah</div>
+        <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>0d 0h 0m</div>
       </div>
+      <div className="w-7 h-7 rounded-full flex items-center justify-center onboard-check-pop"
+        style={{ backgroundColor: COLORS.primary }}>
+        <Check className="w-4 h-4 text-white" />
+      </div>
+    </div>
+    <div className="flex items-center justify-center gap-1.5 mt-3 onboard-fade-in" style={{ animationDelay: '0.4s' }}>
+      <Flame className="w-4 h-4" style={{ color: COLORS.accent }} />
+      <span className="text-sm font-bold font-nunito" style={{ color: COLORS.accent }}>4 streak</span>
     </div>
   </div>
 );
@@ -616,7 +651,7 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
     {
       visual: <OnboardingTimerVisual theme={theme} />,
       title: 'In Time',
-      subtitle: 'As Time moves forward, your connections can stay grounded through deliberate care.',
+      subtitle: 'Time passes. Connection is a choice.',
     },
     {
       visual: <OnboardingCardsVisual theme={theme} />,
@@ -631,7 +666,7 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
     {
       visual: <OnboardingDoneVisual theme={theme} />,
       title: 'That\'s it',
-      subtitle: 'One tap when you connect. Stay In Time.',
+      subtitle: 'One tap when you connect. That\'s it.',
     },
   ];
 
@@ -711,7 +746,6 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
 
       {/* Onboarding-specific styles (this component returns before global styles) */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap');
         .font-nunito { font-family: 'Nunito', -apple-system, sans-serif; }
         .pt-safe-top { padding-top: max(env(safe-area-inset-top), 16px); }
         .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
@@ -724,6 +758,9 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
 
         @keyframes onboard-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
         .onboard-pulse-ring { animation: onboard-pulse 2.5s ease-in-out infinite; }
+
+        @keyframes onboard-line-draw { from { stroke-dashoffset: 72; } to { stroke-dashoffset: 0; } }
+        .onboard-line-draw { animation: onboard-line-draw 1.5s ease-out 0.5s both; }
 
         @keyframes onboard-pop { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
         .onboard-check-pop { animation: onboard-pop 0.4s ease-out 0.15s both; }
@@ -1058,6 +1095,16 @@ export default function App() {
     showToast('Data imported');
   };
 
+  const handleResetData = () => {
+    setAppState({
+      friends: [],
+      meetings: [],
+      settings: { theme: appState.settings.theme, notificationsEnabled: true, dailySummaryInterval: 30, thresholdAlertsEnabled: true, hasCompletedOnboarding: true }
+    });
+    setCurrentModal(null); setCurrentScreen('home'); setSelectedFriendId(null);
+    showToast('All data cleared');
+  };
+
   const handleAddFriend = (data: Partial<Friend>) => {
     const newFriend: Friend = {
       id: generateId(), name: data.name!, relationshipTier: data.relationshipTier!, cadenceDays: data.cadenceDays!,
@@ -1221,11 +1268,6 @@ export default function App() {
                 >
                   <Plus className="w-4 h-4" />Add First Friend
                 </button>
-                <label className="mt-3 px-6 py-2.5 rounded-xl text-sm font-medium font-nunito inline-flex items-center gap-2 cursor-pointer transition-all active:scale-95"
-                  style={{ color: COLORS.primary, backgroundColor: `${COLORS.primary}10` }}>
-                  <Upload className="w-4 h-4" />Import Data
-                  <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
-                </label>
               </Card>
             ) : (
               <div>
@@ -1329,23 +1371,15 @@ export default function App() {
 
               <TimerDisplay lastMeeting={selectedFriend.lastMeetingDate} cadence={selectedFriend.cadenceDays} size="large" theme={theme} />
 
-              <div className="flex justify-center gap-6 mt-4 pt-4" style={{ borderTop: `1px solid ${theme.border}` }}>
-                {selectedFriend.streakCount > 0 && (
-                  <div className="text-center">
-                    <div className="flex items-center gap-1 justify-center mb-0.5">
-                      <Flame className="w-4 h-4" style={{ color: COLORS.accent }} />
-                      <span className="text-xl font-bold font-nunito" style={{ color: COLORS.accent }}>{selectedFriend.streakCount}</span>
-                    </div>
-                    <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>streak</div>
-                  </div>
-                )}
-                <div className="text-center">
-                  <div className="text-xl font-bold font-nunito" style={{ color: theme.text }}>{selectedFriend.multiplier.toFixed(1)}×</div>
-                  <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>multiplier</div>
-                </div>
+              <div className="flex justify-center mt-4 pt-4" style={{ borderTop: `1px solid ${theme.border}` }}>
                 <div className="text-center">
                   <div className="text-xl font-bold font-nunito" style={{ color: theme.text }}>{selectedFriend.totalMeetings}</div>
                   <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>meetings</div>
+                  {selectedFriend.lastMeetingDate && (
+                    <div className="text-xs font-nunito mt-1" style={{ color: theme.textMuted }}>
+                      last: {new Date(selectedFriend.lastMeetingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1359,23 +1393,34 @@ export default function App() {
                 return friendMeetings.length === 0 ? (
                   <Card theme={theme} className="text-center py-8">
                     <div className="text-3xl mb-2">⏳</div>
-                    <div className="text-sm font-nunito" style={{ color: theme.textMuted }}>No meetings yet</div>
+                    <div className="text-sm font-nunito" style={{ color: theme.textMuted }}>You haven't connected yet — start the clock.</div>
                   </Card>
                 ) : (
                   <div className="space-y-2">
-                    {friendMeetings.slice(0, historyLimit).map(meeting => (
-                      <Card theme={theme} key={meeting.id} className="p-3">
-                        <div className="flex justify-between items-start">
-                          <div className="font-medium text-sm font-nunito" style={{ color: theme.text }}>
-                            {new Date(meeting.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {friendMeetings.slice(0, historyLimit).map((meeting, idx) => {
+                      // Determine if this meeting was on-cadence by gap to previous
+                      let borderColor = COLORS.fresh;
+                      const nextMeeting = friendMeetings[idx + 1];
+                      if (nextMeeting) {
+                        const gapDays = (meeting.timestamp - nextMeeting.timestamp) / 86400000;
+                        const ratio = gapDays / selectedFriend.cadenceDays;
+                        if (ratio > 1) borderColor = COLORS.attention;
+                        else if (ratio > 0.75) borderColor = COLORS.approaching;
+                      }
+                      return (
+                        <Card theme={theme} key={meeting.id} className="p-3" style={{ borderLeft: `3px solid ${borderColor}` }}>
+                          <div className="flex justify-between items-start">
+                            <div className="font-medium text-sm font-nunito" style={{ color: theme.text }}>
+                              {new Date(meeting.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </div>
+                            <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>
+                              {new Date(meeting.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
                           </div>
-                          <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>
-                            {new Date(meeting.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </div>
-                        {meeting.note && <div className="text-xs font-nunito mt-1" style={{ color: theme.textMuted }}>{meeting.note}</div>}
-                      </Card>
-                    ))}
+                          {meeting.note && <div className="text-xs font-nunito mt-1" style={{ color: theme.textMuted }}>{meeting.note}</div>}
+                        </Card>
+                      );
+                    })}
                     {friendMeetings.length > historyLimit && (
                       <button onClick={() => setHistoryLimit(prev => prev + 10)}
                         className="w-full py-2.5 text-sm font-medium font-nunito rounded-xl transition-colors"
@@ -1393,7 +1438,7 @@ export default function App() {
             <button onClick={() => setCurrentModal('log-meeting')}
               className="w-full h-12 text-white rounded-xl font-semibold font-nunito flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm"
               style={{ backgroundColor: COLORS.primary }}>
-              <Check className="w-4 h-4" />Log Meeting with Note
+              <Check className="w-4 h-4" />Log connection
             </button>
           </div>
         </div>
@@ -1412,20 +1457,14 @@ export default function App() {
                 <h2 className="text-base font-bold font-nunito mb-1" style={{ color: theme.text }}>No data yet</h2>
                 <p className="text-sm font-nunito" style={{ color: theme.textMuted }}>Add friends and log meetings to see insights.</p>
               </Card>
-            ) : appState.meetings.length < 3 ? (
-              <Card theme={theme} className="text-center py-12">
-                <div className="text-4xl mb-3">📊</div>
-                <h2 className="text-base font-bold font-nunito mb-1" style={{ color: theme.text }}>Almost there</h2>
-                <p className="text-sm font-nunito" style={{ color: theme.textMuted }}>Log a few more meetings to unlock insights. ({appState.meetings.length}/3)</p>
-              </Card>
             ) : (() => {
               // Compute all insights data once
               const allMeetings = appState.meetings;
               const now = Date.now();
 
-              // Weekly activity — last 8 weeks
+              // Weekly activity — last 4 weeks
               const weeklyData: { label: string; count: number }[] = [];
-              for (let i = 7; i >= 0; i--) {
+              for (let i = 3; i >= 0; i--) {
                 const weekStart = now - (i + 1) * 7 * 86400000;
                 const weekEnd = now - i * 7 * 86400000;
                 const count = allMeetings.filter(m => m.timestamp >= weekStart && m.timestamp < weekEnd).length;
@@ -1479,7 +1518,7 @@ export default function App() {
                 <>
                   {/* Overall Health Ring */}
                   <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
-                    <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Overall Health</h2>
+                    <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>How you're doing</h2>
                     <div className="flex items-center justify-center mb-3">
                       <div className="relative w-28 h-28">
                         <svg className="transform -rotate-90 w-28 h-28">
@@ -1492,9 +1531,25 @@ export default function App() {
                       </div>
                     </div>
                     <p className="text-center text-xs font-nunito" style={{ color: theme.textMuted }}>
-                      {overallHealth >= 80 ? 'Excellent' : overallHealth >= 60 ? 'Good' : overallHealth >= 40 ? 'Needs attention' : 'Getting started'}
+                      {overallHealth >= 80 ? 'Excellent' : overallHealth >= 60 ? 'Good' : overallHealth >= 40 ? 'Fair' : 'Needs attention'}
                     </p>
                   </Card>
+
+                  {/* Color Legend */}
+                  <div className={`flex items-center justify-center gap-4 ${TOKENS.spacing.sectionGap}`}>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.fresh }} />
+                      <span className="text-xs font-nunito" style={{ color: theme.textMuted }}>On track</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.approaching }} />
+                      <span className="text-xs font-nunito" style={{ color: theme.textMuted }}>Approaching</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.attention }} />
+                      <span className="text-xs font-nunito" style={{ color: theme.textMuted }}>Overdue</span>
+                    </div>
+                  </div>
 
                   {/* Stats Row */}
                   <div className={`grid grid-cols-3 gap-2 ${TOKENS.spacing.sectionGap}`}>
@@ -1517,7 +1572,7 @@ export default function App() {
 
                   {/* Weekly Activity Chart */}
                   <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
-                    <h2 className="text-xs font-medium mb-4 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Weekly Activity</h2>
+                    <h2 className="text-xs font-medium mb-4 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>This month</h2>
                     <div className="flex items-end gap-1.5" style={{ height: 80 }}>
                       {weeklyData.map((week, i) => {
                         const height = maxWeekly > 0 ? Math.max(4, (week.count / maxWeekly) * 72) : 4;
@@ -1556,8 +1611,14 @@ export default function App() {
                             <Award className="w-3.5 h-3.5" style={{ color: COLORS.fresh }} />
                             <span className="text-xs font-semibold font-nunito uppercase tracking-wide" style={{ color: COLORS.fresh }}>Strongest</span>
                           </div>
-                          <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{strongest.friend.name}</div>
-                          <div className="text-xs font-nunito mt-0.5" style={{ color: theme.textMuted }}>Score: {strongest.score}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold font-nunito flex-shrink-0"
+                              style={{ backgroundColor: COLORS.fresh }}>{strongest.friend.name.charAt(0).toUpperCase()}</div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{strongest.friend.name}</div>
+                              <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>Score: {strongest.score}</div>
+                            </div>
+                          </div>
                         </Card>
                       )}
                       {mostNeglected && (
@@ -1566,9 +1627,15 @@ export default function App() {
                             <AlertTriangle className="w-3.5 h-3.5" style={{ color: COLORS.attention }} />
                             <span className="text-xs font-semibold font-nunito uppercase tracking-wide" style={{ color: COLORS.attention }}>Needs love</span>
                           </div>
-                          <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{mostNeglected.name}</div>
-                          <div className="text-xs font-nunito mt-0.5" style={{ color: theme.textMuted }}>
-                            {getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays) < 0 ? 'Overdue' : getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays) === 0 ? 'Due today' : `${getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays)}d left`}
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold font-nunito flex-shrink-0"
+                              style={{ backgroundColor: COLORS.attention }}>{mostNeglected.name.charAt(0).toUpperCase()}</div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{mostNeglected.name}</div>
+                              <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>
+                                {getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays) < 0 ? 'Overdue' : getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays) === 0 ? 'Due today' : `${getDaysUntilDue(mostNeglected.lastMeetingDate, mostNeglected.cadenceDays)}d left`}
+                              </div>
+                            </div>
                           </div>
                         </Card>
                       )}
@@ -1606,7 +1673,7 @@ export default function App() {
 
                   {/* Individual Scores with Trends */}
                   <Card theme={theme} className="p-5">
-                    <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Individual Scores</h2>
+                    <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Your circle</h2>
                     <div className="space-y-3">
                       {withScores.sort((a, b) => b.score - a.score).map(({ friend, score }) => {
                         const trend = getTrend(friend);
@@ -1645,16 +1712,20 @@ export default function App() {
 
           <div className={`${TOKENS.spacing.screenPadding}`}>
             <Card theme={theme} className={`overflow-hidden ${TOKENS.spacing.cardGap}`}>
-              <div className="px-4 py-2.5" style={{ borderBottom: `1px solid ${theme.border}` }}>
-                <h3 className="text-xs font-medium uppercase tracking-wide font-nunito" style={{ color: theme.textMuted }}>Appearance</h3>
-              </div>
-              <div className="px-4 py-3 flex items-center justify-between">
-                <span className="text-sm font-nunito" style={{ color: theme.text }}>Theme</span>
-                <select value={appState.settings.theme} onChange={(e) => setAppState(prev => ({ ...prev, settings: { ...prev.settings, theme: e.target.value as 'auto' | 'light' | 'dark' } }))}
-                  className="px-3 py-1.5 rounded-lg border-none text-sm font-nunito focus:outline-none"
-                  style={{ backgroundColor: theme.inputBg, color: theme.text }}>
-                  <option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option>
-                </select>
+              <div className="px-4 py-3">
+                <div className="text-xs font-medium uppercase tracking-wide font-nunito mb-3" style={{ color: theme.textMuted }}>Appearance</div>
+                <div className="flex gap-1.5 p-1 rounded-xl" style={{ backgroundColor: theme.inputBg }}>
+                  {(['auto', 'light', 'dark'] as const).map((opt) => (
+                    <button key={opt} onClick={() => setAppState(prev => ({ ...prev, settings: { ...prev.settings, theme: opt } }))}
+                      className="flex-1 py-2 rounded-lg font-semibold font-nunito capitalize text-sm transition-all"
+                      style={{
+                        backgroundColor: appState.settings.theme === opt ? COLORS.primary : 'transparent',
+                        color: appState.settings.theme === opt ? 'white' : theme.textSecondary,
+                      }}>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
               </div>
             </Card>
 
@@ -1662,15 +1733,34 @@ export default function App() {
               <div className="px-4 py-2.5" style={{ borderBottom: `1px solid ${theme.border}` }}>
                 <h3 className="text-xs font-medium uppercase tracking-wide font-nunito" style={{ color: theme.textMuted }}>Data</h3>
               </div>
-              <button onClick={handleExport} className="w-full px-4 py-3 flex items-center gap-3 transition-colors" style={{ borderBottom: `1px solid ${theme.border}` }}>
-                <Download className="w-4 h-4" style={{ color: COLORS.primary }} />
-                <span className="text-sm font-nunito" style={{ color: theme.text }}>Export</span>
+              <button onClick={handleExport} className="w-full px-4 py-3 flex items-center gap-3 transition-colors text-left" style={{ borderBottom: `1px solid ${theme.border}` }}>
+                <Download className="w-4 h-4 flex-shrink-0" style={{ color: COLORS.primary }} />
+                <div>
+                  <div className="text-sm font-nunito" style={{ color: theme.text }}>Export</div>
+                  <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>Save a backup to your device</div>
+                </div>
               </button>
-              <label className="w-full px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer">
-                <Upload className="w-4 h-4" style={{ color: COLORS.primary }} />
-                <span className="text-sm font-nunito" style={{ color: theme.text }}>Import</span>
+              <label className="w-full px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer text-left">
+                <Upload className="w-4 h-4 flex-shrink-0" style={{ color: COLORS.primary }} />
+                <div>
+                  <div className="text-sm font-nunito" style={{ color: theme.text }}>Import</div>
+                  <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>Restore from a previous backup</div>
+                </div>
                 <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
               </label>
+            </Card>
+
+            <Card theme={theme} className={`overflow-hidden ${TOKENS.spacing.cardGap}`} style={{ borderColor: `${COLORS.attention}30` }}>
+              <div className="px-4 py-2.5" style={{ borderBottom: `1px solid ${theme.border}` }}>
+                <h3 className="text-xs font-medium uppercase tracking-wide font-nunito" style={{ color: COLORS.attention }}>Danger zone</h3>
+              </div>
+              <button onClick={() => setCurrentModal('reset-confirm')} className="w-full px-4 py-3 flex items-center gap-3 transition-colors text-left">
+                <Trash2 className="w-4 h-4 flex-shrink-0" style={{ color: COLORS.attention }} />
+                <div>
+                  <div className="text-sm font-nunito" style={{ color: COLORS.attention }}>Reset all data</div>
+                  <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>Remove all friends, meetings, and settings</div>
+                </div>
+              </button>
             </Card>
 
             <Card theme={theme} className="overflow-hidden">
@@ -1716,10 +1806,27 @@ export default function App() {
           theme={theme}
         />
       )}
+      {currentModal === 'reset-confirm' && (
+        <>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={() => setCurrentModal(null)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-2xl p-5 max-w-sm mx-auto animate-scale-in" style={{ backgroundColor: theme.card }}>
+            <div className="text-center mb-5">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: `${COLORS.attention}15` }}>
+                <AlertTriangle className="w-6 h-6" style={{ color: COLORS.attention }} />
+              </div>
+              <h2 className="text-lg font-bold font-nunito mb-1" style={{ color: theme.text }}>Reset everything?</h2>
+              <p className="text-sm font-nunito" style={{ color: theme.textSecondary }}>This will permanently delete all friends, meetings, and settings. This cannot be undone.</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setCurrentModal(null)} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm" style={{ backgroundColor: theme.border, color: theme.text }}>Cancel</button>
+              <button onClick={handleResetData} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm text-white" style={{ backgroundColor: COLORS.attention }}>Reset</button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* GLOBAL STYLES */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap');
         .font-nunito { font-family: 'Nunito', -apple-system, sans-serif; }
         .pt-safe-top { padding-top: max(env(safe-area-inset-top), 16px); }
         .safe-area-top { padding-top: env(safe-area-inset-top); }
