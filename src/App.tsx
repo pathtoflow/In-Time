@@ -216,6 +216,9 @@ const useDarkMode = (theme: 'auto' | 'light' | 'dark') => {
       }
       setIsDark(dark);
       document.documentElement.classList.toggle('dark', dark);
+      const bg = dark ? COLORS.darkBg : COLORS.lightBg;
+      document.documentElement.style.backgroundColor = bg;
+      document.body.style.backgroundColor = bg;
     };
     updateTheme();
     if (theme === 'auto') {
@@ -545,26 +548,15 @@ const AppIcon = ({ size = 120, withBackground = true, isDark = false }: { size?:
 );
 
 const OnboardingTimerVisual = ({ theme }: { theme: Theme }) => (
-  <div className="relative mx-auto" style={{ width: 200, height: 120 }}>
-    {/* Left avatar */}
-    <div className="absolute left-2 top-1/2 -translate-y-1/2 w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-bold font-nunito onboard-fade-in"
+  <div className="flex items-center justify-center gap-5 mx-auto">
+    <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-bold font-nunito onboard-fade-in"
       style={{ backgroundColor: COLORS.fresh }}>A</div>
-    {/* Right avatar */}
-    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-bold font-nunito onboard-fade-in"
+    <div className="flex flex-col items-center onboard-fade-in" style={{ animationDelay: '0.3s' }}>
+      <div className="text-lg font-semibold font-nunito tabular-nums onboard-pulse-ring" style={{ color: COLORS.primary }}>3d 14h</div>
+      <div className="w-12 h-px mt-1" style={{ backgroundColor: theme.border }} />
+    </div>
+    <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-bold font-nunito onboard-fade-in"
       style={{ backgroundColor: COLORS.primary, animationDelay: '0.15s' }}>B</div>
-    {/* Pulsing connection line */}
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 onboard-fade-in" style={{ animationDelay: '0.3s' }}>
-      <svg width="72" height="24" viewBox="0 0 72 24">
-        <line x1="0" y1="12" x2="72" y2="12" stroke={theme.border} strokeWidth="2" strokeDasharray="4 4" />
-        <line x1="0" y1="12" x2="72" y2="12" stroke={COLORS.primary} strokeWidth="2" strokeDasharray="4 4" className="onboard-line-draw" />
-      </svg>
-    </div>
-    {/* Counter between */}
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-4 onboard-fade-in" style={{ animationDelay: '0.5s' }}>
-      <div className="text-xs font-nunito tabular-nums font-semibold px-2 py-0.5 rounded-full" style={{ color: COLORS.primary, backgroundColor: `${COLORS.primary}15` }}>
-        3d 14h
-      </div>
-    </div>
   </div>
 );
 
@@ -647,6 +639,13 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
   const [step, setStep] = useState(0);
   const theme = getTheme(isDark);
 
+  // Ensure html/body bg matches during onboarding
+  useEffect(() => {
+    const bg = isDark ? COLORS.darkBg : COLORS.lightBg;
+    document.documentElement.style.backgroundColor = bg;
+    document.body.style.backgroundColor = bg;
+  }, [isDark]);
+
   const steps = [
     {
       visual: <OnboardingTimerVisual theme={theme} />,
@@ -675,7 +674,7 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
 
   return (
     <div
-      className="h-screen flex flex-col relative overflow-hidden"
+      className="h-screen-safe flex flex-col relative overflow-hidden"
       style={{
         background: isDark
           ? `linear-gradient(180deg, ${COLORS.darkBg} 0%, #1E1A14 50%, ${COLORS.darkBg} 100%)`
@@ -759,11 +758,9 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
         @keyframes onboard-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
         .onboard-pulse-ring { animation: onboard-pulse 2.5s ease-in-out infinite; }
 
-        @keyframes onboard-line-draw { from { stroke-dashoffset: 72; } to { stroke-dashoffset: 0; } }
-        .onboard-line-draw { animation: onboard-line-draw 1.5s ease-out 0.5s both; }
-
         @keyframes onboard-pop { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
         .onboard-check-pop { animation: onboard-pop 0.4s ease-out 0.15s both; }
+        .h-screen-safe { height: 100vh; height: 100dvh; }
       `}</style>
     </div>
   );
@@ -1211,7 +1208,7 @@ export default function App() {
   }
 
   return (
-    <GradientBackground isDark={isDark} className="h-screen flex flex-col">
+    <GradientBackground isDark={isDark} className="h-screen-safe flex flex-col">
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* HOME SCREEN */}
@@ -1845,6 +1842,8 @@ export default function App() {
         .animate-screen-slide { animation: screen-slide-in 0.25s ease-out; }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
+        html, body, #root { min-height: 100vh; min-height: 100dvh; margin: 0; padding: 0; }
+        .h-screen-safe { height: 100vh; height: 100dvh; }
       `}</style>
     </GradientBackground>
   );
