@@ -548,15 +548,8 @@ const AppIcon = ({ size = 120, withBackground = true, isDark = false }: { size?:
 );
 
 const OnboardingTimerVisual = ({ theme }: { theme: Theme }) => (
-  <div className="flex items-center justify-center gap-5 mx-auto">
-    <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-bold font-nunito onboard-fade-in"
-      style={{ backgroundColor: COLORS.fresh }}>A</div>
-    <div className="flex flex-col items-center onboard-fade-in" style={{ animationDelay: '0.3s' }}>
-      <div className="text-lg font-semibold font-nunito tabular-nums onboard-pulse-ring" style={{ color: COLORS.primary }}>3d 14h</div>
-      <div className="w-12 h-px mt-1" style={{ backgroundColor: theme.border }} />
-    </div>
-    <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-bold font-nunito onboard-fade-in"
-      style={{ backgroundColor: COLORS.primary, animationDelay: '0.15s' }}>B</div>
+  <div className="mx-auto onboard-pulse-ring" style={{ width: 140, height: 140 }}>
+    <AppIcon size={140} withBackground={true} />
   </div>
 );
 
