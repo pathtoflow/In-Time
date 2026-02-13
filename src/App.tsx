@@ -13,6 +13,7 @@ interface Friend {
   multiplier: number;
   totalMeetings: number;
   isArchived: boolean;
+  characterId?: number; // 0-4, assigned on creation
   createdAt: number;
   updatedAt: number;
 }
@@ -71,7 +72,7 @@ type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | '
 
 // ==================== CONSTANTS ====================
 
-const APP_VERSION = '4.3.0';
+const APP_VERSION = '4.4.0';
 
 // App icon — single continuous hourglass path (viewBox 0 0 512 512)
 const HOURGLASS_PATH = 'M 190 120 L 322 120 C 334 120, 342 128, 342 140 L 342 160 C 342 208, 312 244, 276 260 L 264 266 L 264 270 L 276 276 C 312 292, 342 328, 342 376 L 342 392 C 342 404, 334 412, 322 412 L 190 412 C 178 412, 170 404, 170 392 L 170 376 C 170 328, 200 292, 236 276 L 248 270 L 248 266 L 236 260 C 200 244, 170 208, 170 160 L 170 140 C 170 128, 178 120, 190 120 Z';
@@ -191,6 +192,203 @@ const getGreeting = (friendCount: number, needsAttention: number): { title: stri
   if (needsAttention === 1) return { title: 'One\'s drifting', subtitle: 'A quick catch-up goes a long way.' };
   return { title: `${needsAttention} drifting`, subtitle: 'Some connections could use your attention.' };
 };
+
+// ==================== PIXEL CHARACTERS ====================
+
+type CharacterState = 'happy' | 'sad' | 'sleeping';
+
+const getCharacterState = (healthScore: number, hasMetBefore: boolean): CharacterState => {
+  if (!hasMetBefore || healthScore < 20) return 'sleeping';
+  if (healthScore < 50) return 'sad';
+  return 'happy';
+};
+
+// Deterministic fallback for friends created before characterId existed
+const getCharacterId = (friend: Friend): number => {
+  if (friend.characterId !== undefined && friend.characterId !== null) return friend.characterId;
+  let hash = 0;
+  for (let i = 0; i < friend.id.length; i++) {
+    hash = ((hash << 5) - hash) + friend.id.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % 5;
+};
+
+// Each character is a 10x10 pixel grid encoded as a string array.
+// Legend: '.' = transparent, 'b' = body, 'a' = accent/cheeks, 'e' = eye, 'd' = detail, 'h' = highlight
+const PIXEL_CHARS: { name: string; grid: string[]; }[] = [
+  // 0: Blob – round amorphous shape
+  {
+    name: 'blob',
+    grid: [
+      '...bbbb...',
+      '..bbbbbb..',
+      '.bbbbbbbb.',
+      '.bbebbebb.',
+      '.bbbbbbbb.',
+      '.bba..abb.',
+      '..bddddb..',
+      '..bbbbbb..',
+      '...bbbb...',
+      '..........',
+    ],
+  },
+  // 1: Star – pointy star creature
+  {
+    name: 'star',
+    grid: [
+      '....bb....',
+      '...bbbb...',
+      '..bbbbbb..',
+      '.bbebbebb.',
+      'bbbbbbbbbb',
+      '..bddddb..',
+      '..bbbbbb..',
+      '.bb....bb.',
+      'bb......bb',
+      '..........',
+    ],
+  },
+  // 2: Ghost – classic ghost silhouette
+  {
+    name: 'ghost',
+    grid: [
+      '...bbbb...',
+      '..bbbbbb..',
+      '.bbbbbbbb.',
+      '.bbebbebb.',
+      '.bbbbbbbb.',
+      '..bddddb..',
+      '.bbbbbbbb.',
+      '.bbbbbbbb.',
+      '.b.bb.bb.b',
+      '..........',
+    ],
+  },
+  // 3: Mushroom – cap and stem
+  {
+    name: 'mushroom',
+    grid: [
+      '..hbbbbh..',
+      '.hbbbbbbh.',
+      'bbbbbbbbbb',
+      'bbbbbbbbbb',
+      '...bbbb...',
+      '..bebbeb..',
+      '..bbbbbb..',
+      '..bddddb..',
+      '..bbbbbb..',
+      '...bbbb...',
+    ],
+  },
+  // 4: Cloud – puffy cloud shape
+  {
+    name: 'cloud',
+    grid: [
+      '....bb....',
+      '..bbbbbb..',
+      '.bbbbbbbb.',
+      'bbbbbbbbbb',
+      'bbebbbbebb',
+      'bbbbbbbbbb',
+      '..bddddb..',
+      '.bbbbbbbb.',
+      '..b.bb.b..',
+      '..........',
+    ],
+  },
+];
+
+// Color palettes per state
+const CHAR_PALETTES: Record<CharacterState, Record<string, string>> = {
+  happy: {
+    b: '#5BC87A', // green body
+    a: '#A8E6A3', // light green cheeks
+    e: '#2D2418', // dark eyes
+    d: '#A8E6A3', // green smile
+    h: '#82D990', // green highlight
+  },
+  sad: {
+    b: '#E88B8B', // red-warm body
+    a: '#D47070', // deeper red cheeks
+    e: '#4A2020', // dark red eyes
+    d: '#D47070', // red mouth
+    h: '#F0A8A8', // light red highlight
+  },
+  sleeping: {
+    b: '#B5AFA7', // grey-warm body
+    a: '#C4BBAF', // warm grey accent
+    e: '#8A8280', // closed-eye grey
+    d: '#8A8280', // grey mouth
+    h: '#C8C2BA', // grey highlight
+  },
+};
+
+const PixelCharacter = ({ characterId, state, size = 44 }: {
+  characterId: number;
+  state: CharacterState;
+  size?: number;
+}) => {
+  const char = PIXEL_CHARS[characterId % 5];
+  const palette = CHAR_PALETTES[state];
+  const gridHeight = char.grid.length;
+  const gridWidth = Math.max(...char.grid.map(r => r.length));
+  const cellSize = size / Math.max(gridWidth, gridHeight);
+
+  // State-based animation class
+  const animClass = state === 'happy' ? 'pixel-char-bounce' : state === 'sad' ? 'pixel-char-sway' : 'pixel-char-sleep';
+
+  return (
+    <div className={`relative flex-shrink-0 ${animClass}`} style={{ width: size, height: size }}>
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        shapeRendering="crispEdges"
+      >
+        {char.grid.map((row, y) =>
+          row.split('').map((cell, x) => {
+            if (cell === '.') return null;
+            const color = palette[cell] || palette.b;
+            return (
+              <rect
+                key={`${y}-${x}`}
+                x={x * cellSize}
+                y={y * cellSize}
+                width={cellSize + 0.5}
+                height={cellSize + 0.5}
+                fill={color}
+              />
+            );
+          })
+        )}
+        {/* Sleeping: zzz particles */}
+        {state === 'sleeping' && (
+          <>
+            <text x={size * 0.72} y={size * 0.2} fontSize={size * 0.18} fill={CHAR_PALETTES.sleeping.e} fontFamily="monospace" className="pixel-zzz-1">z</text>
+            <text x={size * 0.82} y={size * 0.08} fontSize={size * 0.14} fill={CHAR_PALETTES.sleeping.e} fontFamily="monospace" className="pixel-zzz-2">z</text>
+          </>
+        )}
+        {/* Happy: sparkle */}
+        {state === 'happy' && (
+          <>
+            <rect x={size * 0.85} y={size * 0.05} width={cellSize * 0.6} height={cellSize * 0.6} fill={COLORS.accent} className="pixel-sparkle-1" />
+            <rect x={size * 0.9} y={size * 0.2} width={cellSize * 0.4} height={cellSize * 0.4} fill={COLORS.accentLight} className="pixel-sparkle-2" />
+          </>
+        )}
+      </svg>
+    </div>
+  );
+};
+
+// Larger version for detail screen
+const PixelCharacterLarge = ({ characterId, state, size = 80 }: {
+  characterId: number;
+  state: CharacterState;
+  size?: number;
+}) => (
+  <PixelCharacter characterId={characterId} state={state} size={size} />
+);
 
 // ==================== CUSTOM HOOKS ====================
 
@@ -441,6 +639,8 @@ const FriendCard = ({
   const daysLeft = getDaysUntilDue(friend.lastMeetingDate, friend.cadenceDays);
   const isOverdue = daysLeft < 0 && friend.lastMeetingDate !== null;
   const isDueToday = daysLeft === 0 && friend.lastMeetingDate !== null;
+  const charState = getCharacterState(healthScore, friend.lastMeetingDate !== null);
+  const charId = getCharacterId(friend);
 
   return (
     <div
@@ -452,14 +652,9 @@ const FriendCard = ({
       }}
     >
       <div className="p-4 cursor-pointer" onClick={onTap}>
-        {/* Row 1: Avatar + Name/Meta + Health Ring */}
+        {/* Row 1: Pixel Character + Name/Meta + Health Ring */}
         <div className="flex items-center gap-3">
-          <div
-            className="w-11 h-11 rounded-full flex items-center justify-center text-white font-semibold text-base font-nunito flex-shrink-0"
-            style={{ backgroundColor: color }}
-          >
-            {friend.name.charAt(0).toUpperCase()}
-          </div>
+          <PixelCharacter characterId={charId} state={charState} size={44} />
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -556,9 +751,9 @@ const OnboardingTimerVisual = ({ theme }: { theme: Theme }) => (
 // Decorative visual for Slide 2 — mini friend cards
 const OnboardingCardsVisual = ({ theme }: { theme: Theme }) => {
   const people = [
-    { name: 'Sarah', color: COLORS.fresh, days: '3d 12h' },
-    { name: 'James', color: COLORS.approaching, days: '11d 4h' },
-    { name: 'Priya', color: COLORS.primary, days: '1d 8h' },
+    { name: 'Sarah', color: COLORS.fresh, days: '3d 12h', charId: 0, charState: 'happy' as CharacterState },
+    { name: 'James', color: COLORS.approaching, days: '11d 4h', charId: 2, charState: 'sad' as CharacterState },
+    { name: 'Priya', color: COLORS.primary, days: '1d 8h', charId: 4, charState: 'happy' as CharacterState },
   ];
   return (
     <div className="w-full max-w-[240px] mx-auto space-y-2">
@@ -573,10 +768,7 @@ const OnboardingCardsVisual = ({ theme }: { theme: Theme }) => {
             animationDelay: `${i * 0.15}s`,
           }}
         >
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold font-nunito flex-shrink-0"
-            style={{ backgroundColor: p.color }}>
-            {p.name[0]}
-          </div>
+          <PixelCharacter characterId={p.charId} state={p.charState} size={32} />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold font-nunito truncate" style={{ color: theme.text }}>{p.name}</div>
             <div className="h-1 rounded-full mt-1.5 w-3/4" style={{ backgroundColor: `${p.color}30` }}>
@@ -610,8 +802,7 @@ const OnboardingDoneVisual = ({ theme }: { theme: Theme }) => (
   <div className="w-full max-w-[220px] mx-auto">
     <div className="rounded-xl p-3 flex items-center gap-3 onboard-card-enter"
       style={{ backgroundColor: theme.card, boxShadow: theme.cardShadow, borderLeft: `3px solid ${COLORS.fresh}` }}>
-      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold font-nunito flex-shrink-0"
-        style={{ backgroundColor: COLORS.fresh }}>S</div>
+      <PixelCharacter characterId={0} state="happy" size={32} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold font-nunito" style={{ color: theme.text }}>Sarah</div>
         <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>0d 0h 0m</div>
@@ -931,9 +1122,7 @@ const LogMeetingModal = ({ friend, onClose, onSave, theme }: { friend: Friend; o
             </button>
           </div>
           <div className="flex items-center gap-3 mb-5 p-3 rounded-xl" style={{ backgroundColor: theme.inputBg }}>
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold font-nunito" style={{ backgroundColor: COLORS.primary }}>
-              {friend.name.charAt(0).toUpperCase()}
-            </div>
+            <PixelCharacter characterId={getCharacterId(friend)} state="happy" size={40} />
             <div>
               <div className="font-semibold font-nunito" style={{ color: theme.text }}>{friend.name}</div>
               <div className="text-xs font-nunito" style={{ color: theme.textSecondary }}>Logging a connection</div>
@@ -1098,7 +1287,9 @@ export default function App() {
   const handleAddFriend = (data: Partial<Friend>) => {
     const newFriend: Friend = {
       id: generateId(), name: data.name!, relationshipTier: data.relationshipTier!, cadenceDays: data.cadenceDays!,
-      lastMeetingDate: null, streakCount: 0, multiplier: 1.0, totalMeetings: 0, isArchived: false, createdAt: Date.now(), updatedAt: Date.now()
+      lastMeetingDate: null, streakCount: 0, multiplier: 1.0, totalMeetings: 0, isArchived: false,
+      characterId: Math.floor(Math.random() * 5),
+      createdAt: Date.now(), updatedAt: Date.now()
     };
     setAppState(prev => ({ ...prev, friends: [...prev.friends, newFriend] }));
     setCurrentModal(null);
@@ -1349,9 +1540,11 @@ export default function App() {
           <div className={`${TOKENS.spacing.screenPadding}`}>
             <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
               <div className="flex justify-center mb-4">
-                <div className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl font-nunito" style={{ backgroundColor: COLORS.primary }}>
-                  {selectedFriend.name.charAt(0).toUpperCase()}
-                </div>
+                <PixelCharacterLarge
+                  characterId={getCharacterId(selectedFriend)}
+                  state={getCharacterState(calculateHealthScore(selectedFriend, appState.meetings), selectedFriend.lastMeetingDate !== null)}
+                  size={80}
+                />
               </div>
 
               <div className="text-center mb-4">
@@ -1602,8 +1795,7 @@ export default function App() {
                             <span className="text-xs font-semibold font-nunito uppercase tracking-wide" style={{ color: COLORS.fresh }}>Strongest</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold font-nunito flex-shrink-0"
-                              style={{ backgroundColor: COLORS.fresh }}>{strongest.friend.name.charAt(0).toUpperCase()}</div>
+                            <PixelCharacter characterId={getCharacterId(strongest.friend)} state="happy" size={28} />
                             <div className="min-w-0">
                               <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{strongest.friend.name}</div>
                               <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>Score: {strongest.score}</div>
@@ -1618,8 +1810,7 @@ export default function App() {
                             <span className="text-xs font-semibold font-nunito uppercase tracking-wide" style={{ color: COLORS.attention }}>Needs love</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold font-nunito flex-shrink-0"
-                              style={{ backgroundColor: COLORS.attention }}>{mostNeglected.name.charAt(0).toUpperCase()}</div>
+                            <PixelCharacter characterId={getCharacterId(mostNeglected)} state={getCharacterState(calculateHealthScore(mostNeglected, allMeetings), mostNeglected.lastMeetingDate !== null)} size={28} />
                             <div className="min-w-0">
                               <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{mostNeglected.name}</div>
                               <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>
@@ -1642,12 +1833,7 @@ export default function App() {
                             <span className="text-sm font-bold tabular-nums font-nunito w-5 text-center" style={{ color: i === 0 ? COLORS.accent : theme.textMuted }}>
                               {i + 1}
                             </span>
-                            <div
-                              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold font-nunito flex-shrink-0"
-                              style={{ backgroundColor: COLORS.primary }}
-                            >
-                              {friend.name.charAt(0).toUpperCase()}
-                            </div>
+                            <PixelCharacter characterId={getCharacterId(friend)} state="happy" size={32} />
                             <div className="flex-1 min-w-0">
                               <span className="text-sm font-medium font-nunito truncate block" style={{ color: theme.text }}>{friend.name}</span>
                             </div>
@@ -1833,6 +2019,18 @@ export default function App() {
         .animate-float { animation: float 3s ease-in-out infinite; }
         .animate-screen-enter { animation: screen-enter 0.25s ease-out; }
         .animate-screen-slide { animation: screen-slide-in 0.25s ease-out; }
+        @keyframes pixel-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+        @keyframes pixel-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+        @keyframes pixel-sleep { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.97); } }
+        @keyframes pixel-zzz { 0% { opacity: 0; transform: translateY(0); } 50% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
+        @keyframes pixel-sparkle { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+        .pixel-char-bounce { animation: pixel-bounce 1.8s ease-in-out infinite; }
+        .pixel-char-sway { animation: pixel-sway 2.5s ease-in-out infinite; }
+        .pixel-char-sleep { animation: pixel-sleep 3s ease-in-out infinite; }
+        .pixel-zzz-1 { animation: pixel-zzz 2s ease-in-out infinite; }
+        .pixel-zzz-2 { animation: pixel-zzz 2s ease-in-out 0.6s infinite; }
+        .pixel-sparkle-1 { animation: pixel-sparkle 1.5s ease-in-out infinite; }
+        .pixel-sparkle-2 { animation: pixel-sparkle 1.5s ease-in-out 0.4s infinite; }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
         html, body, #root { min-height: 100vh; min-height: 100dvh; margin: 0; padding: 0; }
