@@ -216,8 +216,10 @@ const getCharacterId = (friend: Friend): number => {
 
 // Each character is a 10x10 pixel grid encoded as a string array.
 // Legend: '.' = transparent, 'b' = body, 'a' = accent/cheeks, 'e' = eye, 'd' = detail, 'h' = highlight
+// Accent cells ('a') are visible in happy state (cheeks), hidden in sad/sleeping.
+// Eye ('e') and mouth ('d') cells are rendered differently per state at draw time.
 const PIXEL_CHARS: { name: string; grid: string[]; }[] = [
-  // 0: Blob – round amorphous shape
+  // 0: Blob
   {
     name: 'blob',
     grid: [
@@ -226,14 +228,14 @@ const PIXEL_CHARS: { name: string; grid: string[]; }[] = [
       '.bbbbbbbb.',
       '.bbebbebb.',
       '.bbbbbbbb.',
-      '.bba..abb.',
+      '.bbabbabb.',
       '..bddddb..',
       '..bbbbbb..',
       '...bbbb...',
       '..........',
     ],
   },
-  // 1: Star – pointy star creature
+  // 1: Star
   {
     name: 'star',
     grid: [
@@ -241,7 +243,7 @@ const PIXEL_CHARS: { name: string; grid: string[]; }[] = [
       '...bbbb...',
       '..bbbbbb..',
       '.bbebbebb.',
-      'bbbbbbbbbb',
+      'bbbabbabbb',
       '..bddddb..',
       '..bbbbbb..',
       '.bb....bb.',
@@ -249,7 +251,7 @@ const PIXEL_CHARS: { name: string; grid: string[]; }[] = [
       '..........',
     ],
   },
-  // 2: Ghost – classic ghost silhouette
+  // 2: Ghost
   {
     name: 'ghost',
     grid: [
@@ -257,7 +259,7 @@ const PIXEL_CHARS: { name: string; grid: string[]; }[] = [
       '..bbbbbb..',
       '.bbbbbbbb.',
       '.bbebbebb.',
-      '.bbbbbbbb.',
+      '.bbabbabb.',
       '..bddddb..',
       '.bbbbbbbb.',
       '.bbbbbbbb.',
@@ -265,7 +267,7 @@ const PIXEL_CHARS: { name: string; grid: string[]; }[] = [
       '..........',
     ],
   },
-  // 3: Mushroom – cap and stem
+  // 3: Mushroom
   {
     name: 'mushroom',
     grid: [
@@ -275,13 +277,13 @@ const PIXEL_CHARS: { name: string; grid: string[]; }[] = [
       'bbbbbbbbbb',
       '...bbbb...',
       '..bebbeb..',
-      '..bbbbbb..',
+      '..babbab..',
       '..bddddb..',
       '..bbbbbb..',
       '...bbbb...',
     ],
   },
-  // 4: Cloud – puffy cloud shape
+  // 4: Cloud
   {
     name: 'cloud',
     grid: [
@@ -290,7 +292,7 @@ const PIXEL_CHARS: { name: string; grid: string[]; }[] = [
       '.bbbbbbbb.',
       'bbbbbbbbbb',
       'bbebbbbebb',
-      'bbbbbbbbbb',
+      'bbabbbbabb',
       '..bddddb..',
       '.bbbbbbbb.',
       '..b.bb.b..',
@@ -299,96 +301,97 @@ const PIXEL_CHARS: { name: string; grid: string[]; }[] = [
   },
 ];
 
-// Color palettes per state
-const CHAR_PALETTES: Record<CharacterState, Record<string, string>> = {
+// Color palettes per state, dark-mode aware for eye contrast
+const getCharPalettes = (isDark: boolean): Record<CharacterState, Record<string, string>> => ({
   happy: {
-    b: '#5BC87A', // green body
-    a: '#A8E6A3', // light green cheeks
-    e: '#2D2418', // dark eyes
-    d: '#A8E6A3', // green smile
-    h: '#82D990', // green highlight
+    b: '#5BC87A',
+    a: '#A8E6A3',
+    e: isDark ? '#1A2E1A' : '#2D2418',
+    d: '#A8E6A3',
+    h: '#82D990',
   },
   sad: {
-    b: '#E88B8B', // red-warm body
-    a: '#D47070', // deeper red cheeks
-    e: '#4A2020', // dark red eyes
-    d: '#D47070', // red mouth
-    h: '#F0A8A8', // light red highlight
+    b: '#E88B8B',
+    a: '#D47070',
+    e: isDark ? '#3A1818' : '#4A2020',
+    d: '#D47070',
+    h: '#F0A8A8',
   },
   sleeping: {
-    b: '#B5AFA7', // grey-warm body
-    a: '#C4BBAF', // warm grey accent
-    e: '#8A8280', // closed-eye grey
-    d: '#8A8280', // grey mouth
-    h: '#C8C2BA', // grey highlight
+    b: '#B5AFA7',
+    a: '#C4BBAF',
+    e: isDark ? '#5A5248' : '#8A8280',
+    d: '#8A8280',
+    h: '#C8C2BA',
   },
-};
+});
 
-const PixelCharacter = ({ characterId, state, size = 44 }: {
+const PixelCharacter = React.memo(({ characterId, state, size = 29, isDark = false }: {
   characterId: number;
   state: CharacterState;
   size?: number;
+  isDark?: boolean;
 }) => {
   const char = PIXEL_CHARS[characterId % 5];
-  const palette = CHAR_PALETTES[state];
-  const gridHeight = char.grid.length;
-  const gridWidth = Math.max(...char.grid.map(r => r.length));
-  const cellSize = size / Math.max(gridWidth, gridHeight);
-
-  // State-based animation class
+  const palette = getCharPalettes(isDark)[state];
+  const cellSize = size / 10;
   const animClass = state === 'happy' ? 'pixel-char-bounce' : state === 'sad' ? 'pixel-char-sway' : 'pixel-char-sleep';
 
   return (
     <div className={`relative flex-shrink-0 ${animClass}`} style={{ width: size, height: size }}>
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        shapeRendering="crispEdges"
-      >
-        {char.grid.map((row, y) =>
-          row.split('').map((cell, x) => {
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} shapeRendering="crispEdges">
+        {char.grid.map((row, y) => {
+          const dIndices = state === 'sad' ? row.split('').reduce<number[]>((acc, c, i) => c === 'd' ? [...acc, i] : acc, []) : [];
+          const dKeepStart = Math.floor((dIndices.length - 2) / 2);
+
+          return row.split('').map((cell, x) => {
             if (cell === '.') return null;
-            const color = palette[cell] || palette.b;
+            let color = palette[cell] || palette.b;
+
+            if (state === 'sleeping') {
+              if (cell === 'e') {
+                return (
+                  <rect key={`${y}-${x}`}
+                    x={(x - 0.3) * cellSize} y={(y + 0.2) * cellSize}
+                    width={cellSize * 1.6} height={cellSize * 0.6}
+                    fill={palette.e} />
+                );
+              }
+              if (cell === 'd' || cell === 'a') color = palette.b;
+            }
+
+            if (state === 'sad') {
+              if (cell === 'a') color = palette.b;
+              if (cell === 'd' && dIndices.length > 2) {
+                const idx = dIndices.indexOf(x);
+                if (idx < dKeepStart || idx >= dKeepStart + 2) color = palette.b;
+              }
+            }
+
             return (
-              <rect
-                key={`${y}-${x}`}
-                x={x * cellSize}
-                y={y * cellSize}
-                width={cellSize + 0.5}
-                height={cellSize + 0.5}
-                fill={color}
-              />
+              <rect key={`${y}-${x}`}
+                x={x * cellSize} y={y * cellSize}
+                width={cellSize + 0.5} height={cellSize + 0.5}
+                fill={color} />
             );
-          })
-        )}
-        {/* Sleeping: zzz particles */}
-        {state === 'sleeping' && (
+          });
+        })}
+        {state === 'sleeping' && size >= 20 && (
           <>
-            <text x={size * 0.72} y={size * 0.2} fontSize={size * 0.18} fill={CHAR_PALETTES.sleeping.e} fontFamily="monospace" className="pixel-zzz-1">z</text>
-            <text x={size * 0.82} y={size * 0.08} fontSize={size * 0.14} fill={CHAR_PALETTES.sleeping.e} fontFamily="monospace" className="pixel-zzz-2">z</text>
+            <rect x={size * 0.75} y={size * 0.18} width={cellSize * 0.8} height={cellSize * 0.8} fill={palette.e} className="pixel-zzz-1" />
+            <rect x={size * 0.85} y={size * 0.06} width={cellSize * 0.6} height={cellSize * 0.6} fill={palette.e} className="pixel-zzz-2" />
           </>
         )}
-        {/* Happy: sparkle */}
-        {state === 'happy' && (
+        {state === 'happy' && size >= 24 && (
           <>
-            <rect x={size * 0.85} y={size * 0.05} width={cellSize * 0.6} height={cellSize * 0.6} fill={COLORS.accent} className="pixel-sparkle-1" />
-            <rect x={size * 0.9} y={size * 0.2} width={cellSize * 0.4} height={cellSize * 0.4} fill={COLORS.accentLight} className="pixel-sparkle-2" />
+            <rect x={size * 0.82} y={size * 0.05} width={size * 0.06} height={size * 0.06} fill={COLORS.accent} className="pixel-sparkle-1" />
+            <rect x={size * 0.88} y={size * 0.18} width={size * 0.05} height={size * 0.05} fill={COLORS.accentLight} className="pixel-sparkle-2" />
           </>
         )}
       </svg>
     </div>
   );
-};
-
-// Larger version for detail screen
-const PixelCharacterLarge = ({ characterId, state, size = 80 }: {
-  characterId: number;
-  state: CharacterState;
-  size?: number;
-}) => (
-  <PixelCharacter characterId={characterId} state={state} size={size} />
-);
+});
 
 // ==================== CUSTOM HOOKS ====================
 
@@ -445,6 +448,8 @@ const GradientBackground = ({ isDark, children, className = '' }: { isDark: bool
 );
 
 // Unified screen header — flat, no gradient bar
+// String titles are absolute-centered (immune to asymmetric action widths).
+// ReactNode titles flow naturally between actions.
 const ScreenHeader = ({ title, isDark, rightAction, leftAction, theme }: {
   title: string | React.ReactNode;
   isDark: boolean;
@@ -453,13 +458,16 @@ const ScreenHeader = ({ title, isDark, rightAction, leftAction, theme }: {
   theme?: Theme;
 }) => {
   const t = theme || getTheme(isDark);
+  const isStringTitle = typeof title === 'string';
   return (
     <div className="pt-safe-top">
       <div className={`${TOKENS.header.paddingX} ${TOKENS.header.paddingTop} ${TOKENS.header.paddingBottom}`}>
-        <div className="flex items-center justify-between">
+        <div className="relative flex items-center justify-between">
           {leftAction || <div className="w-9" />}
-          {typeof title === 'string' ? (
-            <h1 className="text-lg font-bold font-nunito" style={{ color: t.text }}>{title}</h1>
+          {isStringTitle ? (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <h1 className="text-lg font-bold font-nunito" style={{ color: t.text }}>{title}</h1>
+            </div>
           ) : title}
           {rightAction || <div className="w-9" />}
         </div>
@@ -654,7 +662,7 @@ const FriendCard = ({
       <div className="p-4 cursor-pointer" onClick={onTap}>
         {/* Row 1: Pixel Character + Name/Meta + Health Ring */}
         <div className="flex items-center gap-3">
-          <PixelCharacter characterId={charId} state={charState} size={44} />
+          <PixelCharacter characterId={charId} state={charState} size={29} isDark={theme.isDark} />
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -768,7 +776,7 @@ const OnboardingCardsVisual = ({ theme }: { theme: Theme }) => {
             animationDelay: `${i * 0.15}s`,
           }}
         >
-          <PixelCharacter characterId={p.charId} state={p.charState} size={32} />
+          <PixelCharacter characterId={p.charId} state={p.charState} size={21} isDark={theme.isDark} />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold font-nunito truncate" style={{ color: theme.text }}>{p.name}</div>
             <div className="h-1 rounded-full mt-1.5 w-3/4" style={{ backgroundColor: `${p.color}30` }}>
@@ -802,7 +810,7 @@ const OnboardingDoneVisual = ({ theme }: { theme: Theme }) => (
   <div className="w-full max-w-[220px] mx-auto">
     <div className="rounded-xl p-3 flex items-center gap-3 onboard-card-enter"
       style={{ backgroundColor: theme.card, boxShadow: theme.cardShadow, borderLeft: `3px solid ${COLORS.fresh}` }}>
-      <PixelCharacter characterId={0} state="happy" size={32} />
+      <PixelCharacter characterId={0} state="happy" size={21} isDark={theme.isDark} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold font-nunito" style={{ color: theme.text }}>Sarah</div>
         <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>0d 0h 0m</div>
@@ -1122,7 +1130,7 @@ const LogMeetingModal = ({ friend, onClose, onSave, theme }: { friend: Friend; o
             </button>
           </div>
           <div className="flex items-center gap-3 mb-5 p-3 rounded-xl" style={{ backgroundColor: theme.inputBg }}>
-            <PixelCharacter characterId={getCharacterId(friend)} state="happy" size={40} />
+            <PixelCharacter characterId={getCharacterId(friend)} state="happy" size={26} isDark={theme.isDark} />
             <div>
               <div className="font-semibold font-nunito" style={{ color: theme.text }}>{friend.name}</div>
               <div className="text-xs font-nunito" style={{ color: theme.textSecondary }}>Logging a connection</div>
@@ -1401,29 +1409,33 @@ export default function App() {
           <ScreenHeader
             isDark={isDark}
             theme={theme}
+            leftAction={<></>}
             title={
-              <div className="flex-1 ml-3">
-                <h1 className="text-xl font-bold font-nunito" style={{ color: theme.text }}>{getGreeting(activeFriendCount, friendsNeedingAttention).title}</h1>
-                <p className="text-sm mt-0.5 font-nunito" style={{ color: theme.textMuted }}>
-                  {getGreeting(activeFriendCount, friendsNeedingAttention).subtitle}
-                </p>
-              </div>
-            }
-            leftAction={
-              activeFriendCount > 0 ? (
-                <div className="relative w-10 h-10 flex-shrink-0">
-                  <svg className="w-full h-full transform -rotate-90">
-                    <circle cx="20" cy="20" r="16" stroke={theme.border} strokeWidth="3" fill="none" />
-                    <circle cx="20" cy="20" r="16" stroke={COLORS.primary} strokeWidth="3" fill="none"
-                      strokeLinecap="round"
-                      strokeDasharray={`${overallHealth * 1.005} 100.5`}
-                      className="transition-all duration-700" />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-xs font-bold tabular-nums font-nunito" style={{ color: COLORS.primary }}>{overallHealth}</span>
-                  </div>
+              <div className="flex-1 flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <AppIcon size={38} withBackground={true} isDark={isDark} />
                 </div>
-              ) : <div className="w-10" />
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-xl font-bold font-nunito" style={{ color: theme.text }}>{getGreeting(activeFriendCount, friendsNeedingAttention).title}</h1>
+                  <p className="text-sm mt-0.5 font-nunito" style={{ color: theme.textMuted }}>
+                    {getGreeting(activeFriendCount, friendsNeedingAttention).subtitle}
+                  </p>
+                </div>
+                {activeFriendCount > 0 && (
+                  <div className="relative w-10 h-10 flex-shrink-0">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="20" cy="20" r="16" stroke={theme.border} strokeWidth="3" fill="none" />
+                      <circle cx="20" cy="20" r="16" stroke={COLORS.primary} strokeWidth="3" fill="none"
+                        strokeLinecap="round"
+                        strokeDasharray={`${overallHealth * 1.005} 100.5`}
+                        className="transition-all duration-700" />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-xs font-bold tabular-nums font-nunito" style={{ color: COLORS.primary }}>{overallHealth}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             }
             rightAction={
               <button onClick={() => setCurrentModal('add-friend')} disabled={activeFriendCount >= 10}
@@ -1540,10 +1552,11 @@ export default function App() {
           <div className={`${TOKENS.spacing.screenPadding}`}>
             <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
               <div className="flex justify-center mb-4">
-                <PixelCharacterLarge
+                <PixelCharacter
                   characterId={getCharacterId(selectedFriend)}
                   state={getCharacterState(calculateHealthScore(selectedFriend, appState.meetings), selectedFriend.lastMeetingDate !== null)}
-                  size={80}
+                  size={52}
+                  isDark={isDark}
                 />
               </div>
 
@@ -1795,7 +1808,7 @@ export default function App() {
                             <span className="text-xs font-semibold font-nunito uppercase tracking-wide" style={{ color: COLORS.fresh }}>Strongest</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <PixelCharacter characterId={getCharacterId(strongest.friend)} state="happy" size={28} />
+                            <PixelCharacter characterId={getCharacterId(strongest.friend)} state={getCharacterState(strongest.score, strongest.friend.lastMeetingDate !== null)} size={18} isDark={isDark} />
                             <div className="min-w-0">
                               <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{strongest.friend.name}</div>
                               <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>Score: {strongest.score}</div>
@@ -1810,7 +1823,7 @@ export default function App() {
                             <span className="text-xs font-semibold font-nunito uppercase tracking-wide" style={{ color: COLORS.attention }}>Needs love</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <PixelCharacter characterId={getCharacterId(mostNeglected)} state={getCharacterState(calculateHealthScore(mostNeglected, allMeetings), mostNeglected.lastMeetingDate !== null)} size={28} />
+                            <PixelCharacter characterId={getCharacterId(mostNeglected)} state={getCharacterState(calculateHealthScore(mostNeglected, allMeetings), mostNeglected.lastMeetingDate !== null)} size={18} isDark={isDark} />
                             <div className="min-w-0">
                               <div className="font-semibold text-sm font-nunito truncate" style={{ color: theme.text }}>{mostNeglected.name}</div>
                               <div className="text-xs font-nunito" style={{ color: theme.textMuted }}>
@@ -1833,7 +1846,7 @@ export default function App() {
                             <span className="text-sm font-bold tabular-nums font-nunito w-5 text-center" style={{ color: i === 0 ? COLORS.accent : theme.textMuted }}>
                               {i + 1}
                             </span>
-                            <PixelCharacter characterId={getCharacterId(friend)} state="happy" size={32} />
+                            <PixelCharacter characterId={getCharacterId(friend)} state={getCharacterState(calculateHealthScore(friend, allMeetings), friend.lastMeetingDate !== null)} size={21} isDark={isDark} />
                             <div className="flex-1 min-w-0">
                               <span className="text-sm font-medium font-nunito truncate block" style={{ color: theme.text }}>{friend.name}</span>
                             </div>
