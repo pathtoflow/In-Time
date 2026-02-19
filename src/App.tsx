@@ -71,7 +71,7 @@ type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | '
 
 const APP_VERSION = '4.4.0';
 
-// App icon â€” single continuous hourglass path (viewBox 0 0 512 512)
+// App icon — single continuous hourglass path (viewBox 0 0 512 512)
 const HOURGLASS_PATH = 'M 190 120 L 322 120 C 334 120, 342 128, 342 140 L 342 160 C 342 208, 312 244, 276 260 L 264 266 L 264 270 L 276 276 C 312 292, 342 328, 342 376 L 342 392 C 342 404, 334 412, 322 412 L 190 412 C 178 412, 170 404, 170 392 L 170 376 C 170 328, 200 292, 236 276 L 248 270 L 248 266 L 236 260 C 200 244, 170 208, 170 160 L 170 140 C 170 128, 178 120, 190 120 Z';
 
 const COLORS = {
@@ -97,7 +97,7 @@ const COLORS = {
   darkBorder: '#3D3630',
 };
 
-// Design tokens â€” single source of truth
+// Design tokens — single source of truth
 const TOKENS = {
   shadow: {
     card: (isDark: boolean) => isDark ? '0 1px 8px rgba(0,0,0,0.3)' : '0 1px 8px rgba(45,36,24,0.06)',
@@ -177,7 +177,7 @@ const calculateHealthScore = (friend: Friend, meetings: Meeting[]): number => {
 };
 
 const getGreeting = (friendCount: number, needsAttention: number): { title: string; subtitle: string } => {
-  if (friendCount === 0) return { title: 'In Time', subtitle: 'Your circle is empty â€” start with someone you miss.' };
+  if (friendCount === 0) return { title: 'In Time', subtitle: 'Your circle is empty — start with someone you miss.' };
   if (needsAttention === 0) {
     const variants = [
       { title: 'All in time', subtitle: `${friendCount} connection${friendCount > 1 ? 's' : ''} on track.` },
@@ -444,7 +444,7 @@ const GradientBackground = ({ isDark, children, className = '' }: { isDark: bool
   </div>
 );
 
-// Unified screen header â€” flat, no gradient bar
+// Unified screen header — flat, no gradient bar
 // String titles are absolute-centered (immune to asymmetric action widths).
 // ReactNode titles flow naturally between actions.
 const ScreenHeader = ({ title, isDark, rightAction, leftAction, theme }: {
@@ -744,8 +744,8 @@ const FriendCard = ({
 
 // ==================== ONBOARDING ====================
 
-// Decorative visual for Slide 1 â€” animated timer ring
-// App icon component â€” reusable across onboarding, settings, etc.
+// Decorative visual for Slide 1 — animated timer ring
+// App icon component — reusable across onboarding, settings, etc.
 const AppIcon = ({ size = 120, withBackground = true, isDark = false }: { size?: number; withBackground?: boolean; isDark?: boolean }) => (
   <svg viewBox="0 0 512 512" width={size} height={size} style={withBackground ? { borderRadius: `${size * 0.22}px` } : undefined}>
     {withBackground && (
@@ -774,7 +774,7 @@ const OnboardingTimerVisual = ({ theme }: { theme: Theme }) => (
   </div>
 );
 
-// Decorative visual for Slide 2 â€” mini friend cards
+// Decorative visual for Slide 2 — mini friend cards
 const OnboardingCardsVisual = ({ theme }: { theme: Theme }) => {
   const people = [
     { name: 'Sarah', color: COLORS.fresh, days: '3d 12h', charId: 0, charState: 'happy' as CharacterState },
@@ -808,7 +808,7 @@ const OnboardingCardsVisual = ({ theme }: { theme: Theme }) => {
   );
 };
 
-// Decorative visual for Slide 3 â€” cadence ring with ticking timer
+// Decorative visual for Slide 3 — cadence ring with ticking timer
 const OnboardingCadenceVisual = ({ theme }: { theme: Theme }) => (
   <div className="relative w-32 h-32 mx-auto">
     <svg className="w-full h-full transform -rotate-90">
@@ -823,7 +823,7 @@ const OnboardingCadenceVisual = ({ theme }: { theme: Theme }) => (
   </div>
 );
 
-// Decorative visual for Slide 4 â€” quick-log tap animation
+// Decorative visual for Slide 4 — quick-log tap animation
 const OnboardingDoneVisual = ({ theme }: { theme: Theme }) => (
   <div className="w-full max-w-[220px] mx-auto">
     <div className="rounded-xl p-3 flex items-center gap-3 onboard-card-enter"
@@ -907,7 +907,7 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
 
       {/* Content */}
       <div className="flex-1 flex flex-col items-center justify-center px-8">
-        {/* Visual â€” keyed to force re-mount and replay animations on step change */}
+        {/* Visual — keyed to force re-mount and replay animations on step change */}
         <div key={step} className="mb-8 w-full onboard-fade-in">
           {currentStep.visual}
         </div>
@@ -1227,7 +1227,7 @@ export default function App() {
 
   useEffect(() => {
     try { localStorage.setItem('in-time-data', JSON.stringify(appState)); }
-    catch { /* storage full or unavailable â€” state persists in memory only */ }
+    catch { /* storage full or unavailable — state persists in memory only */ }
   }, [appState]);
 
   const showToast = useCallback((message: string, type: Toast['type'] = 'success', action?: Toast['action']) => {
@@ -1567,7 +1567,7 @@ export default function App() {
                 return friendMeetings.length === 0 ? (
                   <Card theme={theme} className="text-center py-8">
                     <div className="mb-2 flex justify-center"><AppIcon size={36} withBackground={false} isDark={isDark} /></div>
-                    <div className="text-sm font-nunito" style={{ color: theme.textMuted }}>You haven't connected yet â€” start the clock.</div>
+                    <div className="text-sm font-nunito" style={{ color: theme.textMuted }}>You haven't connected yet — start the clock.</div>
                   </Card>
                 ) : (
                   <div className="space-y-2">
@@ -1636,7 +1636,7 @@ export default function App() {
               const allMeetings = appState.meetings;
               const now = Date.now();
 
-              // Weekly activity â€” last 4 weeks
+              // Weekly activity — last 4 weeks
               const weeklyData: { label: string; count: number }[] = [];
               for (let i = 3; i >= 0; i--) {
                 const weekStart = now - (i + 1) * 7 * 86400000;
