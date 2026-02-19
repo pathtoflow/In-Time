@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Check, Plus, ChevronLeft, ChevronRight, Flame, BarChart3, Settings, Home, Download, Upload, X, Trash2, TrendingUp, TrendingDown, Award, AlertTriangle, Calendar, Edit3 } from 'lucide-react';
 
 // ==================== TYPES ====================
@@ -28,9 +28,6 @@ interface Meeting {
 
 interface AppSettings {
   theme: 'auto' | 'light' | 'dark';
-  notificationsEnabled: boolean;
-  dailySummaryInterval: 7 | 15 | 30 | 45 | 60 | 90;
-  thresholdAlertsEnabled: boolean;
   hasCompletedOnboarding: boolean;
 }
 
@@ -68,13 +65,13 @@ interface Theme {
 }
 
 type Screen = 'onboarding' | 'home' | 'friend-detail' | 'insights' | 'settings';
-type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | 'delete-confirm' | 'quick-log-confirm' | 'reset-confirm' | null;
+type Modal = 'add-friend' | 'edit-friend' | 'log-meeting' | 'import-confirm' | 'delete-confirm' | 'reset-confirm' | null;
 
 // ==================== CONSTANTS ====================
 
 const APP_VERSION = '4.4.0';
 
-// App icon — single continuous hourglass path (viewBox 0 0 512 512)
+// App icon â€” single continuous hourglass path (viewBox 0 0 512 512)
 const HOURGLASS_PATH = 'M 190 120 L 322 120 C 334 120, 342 128, 342 140 L 342 160 C 342 208, 312 244, 276 260 L 264 266 L 264 270 L 276 276 C 312 292, 342 328, 342 376 L 342 392 C 342 404, 334 412, 322 412 L 190 412 C 178 412, 170 404, 170 392 L 170 376 C 170 328, 200 292, 236 276 L 248 270 L 248 266 L 236 260 C 200 244, 170 208, 170 160 L 170 140 C 170 128, 178 120, 190 120 Z';
 
 const COLORS = {
@@ -96,11 +93,11 @@ const COLORS = {
   darkCard: '#2A2318',
   darkText: '#F5F1EB',
   darkTextSecondary: '#A89E94',
-  darkTextMuted: '#6B6158',
+  darkTextMuted: '#8A8076',
   darkBorder: '#3D3630',
 };
 
-// Design tokens — single source of truth
+// Design tokens â€” single source of truth
 const TOKENS = {
   shadow: {
     card: (isDark: boolean) => isDark ? '0 1px 8px rgba(0,0,0,0.3)' : '0 1px 8px rgba(45,36,24,0.06)',
@@ -108,7 +105,7 @@ const TOKENS = {
   header: {
     paddingTop: 'pt-3',
     paddingBottom: 'pb-4',
-    paddingX: 'px-5',
+    paddingX: 'px-4',
   },
   spacing: {
     screenPadding: 'px-4',
@@ -180,7 +177,7 @@ const calculateHealthScore = (friend: Friend, meetings: Meeting[]): number => {
 };
 
 const getGreeting = (friendCount: number, needsAttention: number): { title: string; subtitle: string } => {
-  if (friendCount === 0) return { title: 'In Time', subtitle: 'Your circle is empty — start with someone you miss.' };
+  if (friendCount === 0) return { title: 'In Time', subtitle: 'Your circle is empty â€” start with someone you miss.' };
   if (needsAttention === 0) {
     const variants = [
       { title: 'All in time', subtitle: `${friendCount} connection${friendCount > 1 ? 's' : ''} on track.` },
@@ -447,7 +444,7 @@ const GradientBackground = ({ isDark, children, className = '' }: { isDark: bool
   </div>
 );
 
-// Unified screen header — flat, no gradient bar
+// Unified screen header â€” flat, no gradient bar
 // String titles are absolute-centered (immune to asymmetric action widths).
 // ReactNode titles flow naturally between actions.
 const ScreenHeader = ({ title, isDark, rightAction, leftAction, theme }: {
@@ -501,25 +498,36 @@ const ToastContainer = ({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
     return () => timers.forEach(clearTimeout);
   }, [toasts, onDismiss]);
 
+  const getToastStyle = (type: Toast['type']) => {
+    switch (type) {
+      case 'error': return { bg: COLORS.attention, Icon: X };
+      case 'warning': return { bg: COLORS.approaching, Icon: AlertTriangle };
+      default: return { bg: COLORS.primary, Icon: Check };
+    }
+  };
+
   return (
     <div className="fixed top-14 left-0 right-0 z-50 flex flex-col items-center gap-2 pointer-events-none px-4 safe-area-top">
-      {toasts.map(toast => (
-        <div
-          key={toast.id}
-          className="px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3 pointer-events-auto animate-slide-down"
-          style={{ backgroundColor: COLORS.primary }}
-          onClick={() => !toast.action && onDismiss(toast.id)}
-        >
-          <Check className="w-5 h-5 flex-shrink-0 text-white" />
-          <span className="text-sm font-medium font-nunito text-white flex-1">{toast.message}</span>
-          {toast.action && (
-            <button onClick={(e) => { e.stopPropagation(); toast.action!.onAction(); onDismiss(toast.id); }}
-              className="text-sm font-bold font-nunito underline text-white ml-2 flex-shrink-0">
-              {toast.action.label}
-            </button>
-          )}
-        </div>
-      ))}
+      {toasts.map(toast => {
+        const { bg, Icon } = getToastStyle(toast.type);
+        return (
+          <div
+            key={toast.id}
+            className="px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3 pointer-events-auto animate-slide-down"
+            style={{ backgroundColor: bg }}
+            onClick={() => !toast.action && onDismiss(toast.id)}
+          >
+            <Icon className="w-5 h-5 flex-shrink-0 text-white" />
+            <span className="text-sm font-medium font-nunito text-white flex-1">{toast.message}</span>
+            {toast.action && (
+              <button onClick={(e) => { e.stopPropagation(); toast.action!.onAction(); onDismiss(toast.id); }}
+                className="text-sm font-bold font-nunito underline text-white ml-2 flex-shrink-0 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 rounded">
+                {toast.action.label}
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -545,7 +553,7 @@ const TimerDisplay = ({ lastMeeting, cadence, size = 'normal', theme }: { lastMe
 
   return (
     <div className="text-center">
-      <div className="font-light tracking-tight font-nunito" style={{ color }}>
+      <div className={`${isLarge ? 'font-nunito font-medium' : 'font-light font-nunito'} tracking-tight`} style={{ color }}>
         <span className={`${isLarge ? 'text-4xl' : 'text-3xl'} tabular-nums`}>{elapsed.days}</span>
         <span className={`${isLarge ? 'text-lg' : 'text-base'} mx-0.5`} style={{ color: theme.textMuted }}>d</span>
         <span className={`${isLarge ? 'text-4xl' : 'text-3xl'} tabular-nums`}>{elapsed.hours}</span>
@@ -571,7 +579,15 @@ const ProgressBar = ({ lastMeeting, cadence, compact = false, theme }: { lastMee
 
   return (
     <div className={compact ? 'mt-2' : 'mt-3'}>
-      <div className={`${compact ? 'h-1.5' : 'h-2'} rounded-full overflow-hidden`} style={{ backgroundColor: theme.border }}>
+      <div
+        className={`${compact ? 'h-1.5' : 'h-2'} rounded-full overflow-hidden`}
+        style={{ backgroundColor: theme.border }}
+        role="progressbar"
+        aria-valuenow={Math.round(percentage)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Cadence progress: ${Math.round(percentage)}%`}
+      >
         <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${percentage}%`, backgroundColor: color }} />
       </div>
       {!compact && (
@@ -612,8 +628,8 @@ const HealthRing = ({ score, size = 32, strokeWidth = 3, theme }: { score: numbe
   const scoreColor = score >= 70 ? COLORS.fresh : score >= 40 ? COLORS.approaching : COLORS.attention;
 
   return (
-    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="transform -rotate-90">
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }} role="img" aria-label={`Health score: ${score} out of 100`}>
+      <svg width={size} height={size} className="transform -rotate-90" aria-hidden="true">
         <circle cx={size / 2} cy={size / 2} r={radius} stroke={theme.border} strokeWidth={strokeWidth} fill="none" />
         <circle cx={size / 2} cy={size / 2} r={radius} stroke={scoreColor} strokeWidth={strokeWidth} fill="none"
           strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset}
@@ -668,7 +684,7 @@ const FriendCard = ({
             <div className="flex items-center gap-2">
               <span className="font-semibold font-nunito truncate text-sm" style={{ color: theme.text }}>{friend.name}</span>
               {friend.streakCount > 0 && (
-                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${COLORS.accent}15` }}>
+                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${COLORS.accent}20` }}>
                   <Flame className="w-3 h-3" style={{ color: COLORS.accent }} />
                   <span className="text-xs font-bold font-nunito" style={{ color: COLORS.accent }}>{friend.streakCount}</span>
                 </div>
@@ -688,7 +704,7 @@ const FriendCard = ({
           <div
             className="px-2 py-0.5 rounded-full text-xs font-semibold font-nunito"
             style={{
-              backgroundColor: `${color}18`,
+              backgroundColor: `${color}20`,
               color: color,
             }}
           >
@@ -703,8 +719,9 @@ const FriendCard = ({
       <div className="flex" style={{ borderTop: `1px solid ${theme.border}` }}>
         <button
           onClick={(e) => { e.stopPropagation(); onQuickLog(); }}
-          className="flex-1 py-2.5 flex items-center justify-center gap-2 text-sm font-medium font-nunito transition-colors"
+          className="flex-1 py-2.5 flex items-center justify-center gap-2 text-sm font-medium font-nunito transition-colors hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
           style={{ color: COLORS.primary }}
+          aria-label={`Quick log meeting with ${friend.name}`}
         >
           <Check className="w-4 h-4" />
           Quick Log
@@ -714,8 +731,9 @@ const FriendCard = ({
 
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="px-6 py-2.5 flex items-center justify-center text-sm font-medium font-nunito transition-colors"
+          className="px-6 py-2.5 flex items-center justify-center text-sm font-medium font-nunito transition-colors hover:opacity-75 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
           style={{ color: COLORS.attention }}
+          aria-label={`Remove ${friend.name}`}
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -726,8 +744,8 @@ const FriendCard = ({
 
 // ==================== ONBOARDING ====================
 
-// Decorative visual for Slide 1 — animated timer ring
-// App icon component — reusable across onboarding, settings, etc.
+// Decorative visual for Slide 1 â€” animated timer ring
+// App icon component â€” reusable across onboarding, settings, etc.
 const AppIcon = ({ size = 120, withBackground = true, isDark = false }: { size?: number; withBackground?: boolean; isDark?: boolean }) => (
   <svg viewBox="0 0 512 512" width={size} height={size} style={withBackground ? { borderRadius: `${size * 0.22}px` } : undefined}>
     {withBackground && (
@@ -756,7 +774,7 @@ const OnboardingTimerVisual = ({ theme }: { theme: Theme }) => (
   </div>
 );
 
-// Decorative visual for Slide 2 — mini friend cards
+// Decorative visual for Slide 2 â€” mini friend cards
 const OnboardingCardsVisual = ({ theme }: { theme: Theme }) => {
   const people = [
     { name: 'Sarah', color: COLORS.fresh, days: '3d 12h', charId: 0, charState: 'happy' as CharacterState },
@@ -779,7 +797,7 @@ const OnboardingCardsVisual = ({ theme }: { theme: Theme }) => {
           <PixelCharacter characterId={p.charId} state={p.charState} size={21} isDark={theme.isDark} />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold font-nunito truncate" style={{ color: theme.text }}>{p.name}</div>
-            <div className="h-1 rounded-full mt-1.5 w-3/4" style={{ backgroundColor: `${p.color}30` }}>
+            <div className="h-1 rounded-full mt-1.5 w-3/4" style={{ backgroundColor: `${p.color}40` }}>
               <div className="h-full rounded-full" style={{ width: '60%', backgroundColor: p.color }} />
             </div>
           </div>
@@ -790,7 +808,7 @@ const OnboardingCardsVisual = ({ theme }: { theme: Theme }) => {
   );
 };
 
-// Decorative visual for Slide 3 — cadence ring with ticking timer
+// Decorative visual for Slide 3 â€” cadence ring with ticking timer
 const OnboardingCadenceVisual = ({ theme }: { theme: Theme }) => (
   <div className="relative w-32 h-32 mx-auto">
     <svg className="w-full h-full transform -rotate-90">
@@ -805,7 +823,7 @@ const OnboardingCadenceVisual = ({ theme }: { theme: Theme }) => (
   </div>
 );
 
-// Decorative visual for Slide 4 — quick-log tap animation
+// Decorative visual for Slide 4 â€” quick-log tap animation
 const OnboardingDoneVisual = ({ theme }: { theme: Theme }) => (
   <div className="w-full max-w-[220px] mx-auto">
     <div className="rounded-xl p-3 flex items-center gap-3 onboard-card-enter"
@@ -881,7 +899,7 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
         <div className="text-xs font-semibold font-nunito tracking-wide uppercase" style={{ color: theme.textMuted }}>
           {step + 1} / {steps.length}
         </div>
-        <button onClick={onComplete} className="py-2 px-3 text-sm font-nunito transition-colors rounded-lg"
+        <button onClick={onComplete} className="py-2 px-3 text-sm font-nunito transition-colors rounded-lg hover:opacity-75 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
           style={{ color: theme.textMuted }}>
           Skip
         </button>
@@ -889,7 +907,7 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
 
       {/* Content */}
       <div className="flex-1 flex flex-col items-center justify-center px-8">
-        {/* Visual — keyed to force re-mount and replay animations on step change */}
+        {/* Visual â€” keyed to force re-mount and replay animations on step change */}
         <div key={step} className="mb-8 w-full onboard-fade-in">
           {currentStep.visual}
         </div>
@@ -919,14 +937,14 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
         <div className="flex gap-3">
           {step > 0 && (
             <button onClick={() => setStep(s => s - 1)}
-              className="flex-1 py-3.5 rounded-2xl font-semibold font-nunito text-sm transition-colors"
+              className="flex-1 py-3.5 rounded-2xl font-semibold font-nunito text-sm transition-colors hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
               style={{ backgroundColor: theme.inputBg, color: theme.text }}>
               Back
             </button>
           )}
           <button
             onClick={() => isLastStep ? onComplete() : setStep(s => s + 1)}
-            className="flex-1 py-3.5 rounded-2xl font-semibold font-nunito flex items-center justify-center gap-2 text-sm text-white transition-all active:scale-[0.98]"
+            className="flex-1 py-3.5 rounded-2xl font-semibold font-nunito flex items-center justify-center gap-2 text-sm text-white transition-all active:scale-[0.98] hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
             style={{ backgroundColor: COLORS.primary }}
           >
             {isLastStep ? 'Get Started' : 'Next'}
@@ -960,35 +978,6 @@ const OnboardingScreen = ({ onComplete, isDark }: { onComplete: () => void; isDa
 
 // ==================== MODALS ====================
 
-const QuickLogConfirmModal = ({ friend, onClose, onConfirmWithNote, onConfirmWithoutNote, theme }: {
-  friend: Friend;
-  onClose: () => void;
-  onConfirmWithNote: () => void;
-  onConfirmWithoutNote: () => void;
-  theme: Theme;
-}) => (
-  <>
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={onClose} />
-    <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-2xl p-5 max-w-sm mx-auto animate-scale-in" style={{ backgroundColor: theme.card }}>
-      <div className="text-center mb-5">
-        <div className="text-4xl mb-3">📝</div>
-        <h2 className="text-lg font-bold font-nunito mb-1" style={{ color: theme.text }}>Add a note?</h2>
-        <p className="text-sm font-nunito" style={{ color: theme.textSecondary }}>Would you like to add a note to this meeting with {friend.name}?</p>
-      </div>
-      <div className="flex flex-col gap-2">
-        <button onClick={onConfirmWithNote} className="w-full py-3 rounded-xl font-semibold font-nunito text-sm text-white" style={{ backgroundColor: COLORS.primary }}>
-          Yes, add a note
-        </button>
-        <button onClick={onConfirmWithoutNote} className="w-full py-3 rounded-xl font-semibold font-nunito text-sm" style={{ backgroundColor: theme.border, color: theme.text }}>
-          No, just log it
-        </button>
-        <button onClick={onClose} className="w-full py-2 font-nunito text-sm" style={{ color: theme.textSecondary }}>
-          Cancel
-        </button>
-      </div>
-    </div>
-  </>
-);
 
 const AddEditFriendModal = ({ friend, onClose, onSave, friendCount, theme }: { friend?: Friend; onClose: () => void; onSave: (data: Partial<Friend>) => void; friendCount: number; theme: Theme }) => {
   const [name, setName] = useState(friend?.name || '');
@@ -1030,12 +1019,12 @@ const AddEditFriendModal = ({ friend, onClose, onSave, friendCount, theme }: { f
   return (
     <>
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl max-h-[85vh] overflow-auto animate-slide-up safe-area-bottom" style={{ backgroundColor: theme.card }}>
+      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl max-h-[85vh] overflow-auto animate-slide-up safe-area-bottom" role="dialog" aria-modal="true" aria-labelledby="add-edit-modal-title" style={{ backgroundColor: theme.card }}>
         <div className="sticky top-0 pb-2" style={{ backgroundColor: theme.card }}>
           <div className="w-12 h-1.5 rounded-full mx-auto mt-3 mb-4" style={{ backgroundColor: theme.border }} />
           <div className="flex items-center justify-between px-5">
-            <h2 className="text-xl font-bold font-nunito" style={{ color: theme.text }}>{friend ? 'Edit Friend' : 'Add Friend'}</h2>
-            <button onClick={onClose} className="p-2 rounded-full transition-colors" style={{ color: theme.textSecondary }}>
+            <h2 id="add-edit-modal-title" className="text-xl font-bold font-nunito" style={{ color: theme.text }}>{friend ? 'Edit Friend' : 'Add Friend'}</h2>
+            <button onClick={onClose} className="p-2 rounded-full transition-colors hover:opacity-75 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ color: theme.textSecondary }} aria-label="Close">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -1045,8 +1034,9 @@ const AddEditFriendModal = ({ friend, onClose, onSave, friendCount, theme }: { f
             <label className="block text-sm font-medium mb-2 font-nunito" style={{ color: theme.textSecondary }}>Name</label>
             <input
               type="text" value={name} onChange={(e) => { setName(e.target.value); setError(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
               placeholder="Friend's name" autoFocus
-              className="w-full px-4 py-3 rounded-xl font-nunito border-2 transition-colors focus:outline-none"
+              className="w-full px-4 py-3 rounded-xl font-nunito border-2 transition-colors focus:outline-none focus:ring-2 focus:ring-[#26A69A]/50"
               style={{
                 backgroundColor: theme.inputBg,
                 color: theme.text,
@@ -1060,7 +1050,7 @@ const AddEditFriendModal = ({ friend, onClose, onSave, friendCount, theme }: { f
             <div className="flex gap-2">
               {(['close', 'casual'] as const).map((t) => (
                 <button key={t} onClick={() => setTier(t)}
-                  className="flex-1 py-3 rounded-xl font-semibold transition-all font-nunito capitalize text-sm"
+                  className="flex-1 py-3 rounded-xl font-semibold transition-all font-nunito capitalize text-sm hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
                   style={{
                     backgroundColor: tier === t ? COLORS.primary : 'transparent',
                     color: tier === t ? 'white' : theme.textSecondary,
@@ -1080,7 +1070,7 @@ const AddEditFriendModal = ({ friend, onClose, onSave, friendCount, theme }: { f
                 value={cadenceInput}
                 onChange={handleCadenceInputChange}
                 onBlur={handleCadenceInputBlur}
-                className="w-16 px-2 py-2 rounded-lg text-center font-medium font-nunito focus:outline-none focus:ring-2 text-sm"
+                className="w-16 px-2 py-2 rounded-lg text-center font-medium font-nunito focus:outline-none focus:ring-2 focus:ring-[#26A69A]/50 text-sm"
                 style={{ backgroundColor: theme.inputBg, color: theme.text }}
                 min="1"
                 inputMode="numeric"
@@ -1090,7 +1080,7 @@ const AddEditFriendModal = ({ friend, onClose, onSave, friendCount, theme }: { f
             <div className="flex flex-wrap gap-2">
               {presets.map(preset => (
                 <button key={preset} onClick={() => handlePresetClick(preset)}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-all font-nunito"
+                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-all font-nunito hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
                   style={{
                     backgroundColor: cadence === preset ? COLORS.primary : theme.inputBg,
                     color: cadence === preset ? 'white' : theme.textSecondary
@@ -1101,10 +1091,10 @@ const AddEditFriendModal = ({ friend, onClose, onSave, friendCount, theme }: { f
             </div>
           </div>
           <div className="flex gap-3 pt-2">
-            <button onClick={onClose} className="flex-1 py-3.5 rounded-xl font-semibold font-nunito text-sm" style={{ backgroundColor: theme.inputBg, color: theme.text }}>
+            <button onClick={onClose} className="flex-1 py-3.5 rounded-xl font-semibold font-nunito text-sm hover:opacity-80 transition-opacity focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ backgroundColor: theme.inputBg, color: theme.text }}>
               Cancel
             </button>
-            <button onClick={handleSave} className="flex-1 py-3.5 rounded-xl font-semibold font-nunito text-sm text-white" style={{ backgroundColor: COLORS.primary }}>
+            <button onClick={handleSave} className="flex-1 py-3.5 rounded-xl font-semibold font-nunito text-sm text-white hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ backgroundColor: COLORS.primary }}>
               Save
             </button>
           </div>
@@ -1120,12 +1110,12 @@ const LogMeetingModal = ({ friend, onClose, onSave, theme }: { friend: Friend; o
   return (
     <>
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl animate-slide-up safe-area-bottom" style={{ backgroundColor: theme.card }}>
+      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl animate-slide-up safe-area-bottom" role="dialog" aria-modal="true" aria-labelledby="log-modal-title" style={{ backgroundColor: theme.card }}>
         <div className="w-12 h-1.5 rounded-full mx-auto mt-3 mb-4" style={{ backgroundColor: theme.border }} />
         <div className="px-5 pb-6">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xl font-bold font-nunito" style={{ color: theme.text }}>Log Meeting</h2>
-            <button onClick={onClose} className="p-2 rounded-full transition-colors" style={{ color: theme.textSecondary }}>
+            <h2 id="log-modal-title" className="text-xl font-bold font-nunito" style={{ color: theme.text }}>Log Meeting</h2>
+            <button onClick={onClose} className="p-2 rounded-full transition-colors hover:opacity-75 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ color: theme.textSecondary }} aria-label="Close">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -1139,16 +1129,16 @@ const LogMeetingModal = ({ friend, onClose, onSave, theme }: { friend: Friend; o
           <div className="mb-5">
             <label className="block text-sm font-medium mb-2 font-nunito" style={{ color: theme.textSecondary }}>Note (optional)</label>
             <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="What did you talk about?" maxLength={200} rows={3}
-              className="w-full px-4 py-3 rounded-xl resize-none font-nunito text-sm focus:outline-none focus:ring-2"
+              className="w-full px-4 py-3 rounded-xl resize-none font-nunito text-sm focus:outline-none focus:ring-2 focus:ring-[#26A69A]/50"
               style={{ backgroundColor: theme.inputBg, color: theme.text }}
             />
             <div className="text-xs text-right mt-1 tabular-nums font-nunito" style={{ color: theme.textSecondary }}>{note.length}/200</div>
           </div>
           <div className="flex gap-3">
-            <button onClick={onClose} className="flex-1 py-3.5 rounded-xl font-semibold font-nunito text-sm" style={{ backgroundColor: theme.inputBg, color: theme.text }}>
+            <button onClick={onClose} className="flex-1 py-3.5 rounded-xl font-semibold font-nunito text-sm hover:opacity-80 transition-opacity focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ backgroundColor: theme.inputBg, color: theme.text }}>
               Cancel
             </button>
-            <button onClick={() => onSave(note.trim() || undefined)} className="flex-1 py-3.5 rounded-xl font-semibold font-nunito text-sm text-white flex items-center justify-center gap-2" style={{ backgroundColor: COLORS.primary }}>
+            <button onClick={() => onSave(note.trim() || undefined)} className="flex-1 py-3.5 rounded-xl font-semibold font-nunito text-sm text-white flex items-center justify-center gap-2 hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ backgroundColor: COLORS.primary }}>
               <Check className="w-4 h-4" />Log
             </button>
           </div>
@@ -1161,15 +1151,17 @@ const LogMeetingModal = ({ friend, onClose, onSave, theme }: { friend: Friend; o
 const DeleteConfirmModal = ({ friend, onClose, onConfirm, theme }: { friend: Friend; onClose: () => void; onConfirm: () => void; theme: Theme }) => (
   <>
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={onClose} />
-    <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-2xl p-5 max-w-sm mx-auto animate-scale-in" style={{ backgroundColor: theme.card }}>
+    <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-3xl p-5 max-w-sm mx-auto animate-scale-in" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title" style={{ backgroundColor: theme.card }}>
       <div className="text-center mb-5">
-        <div className="text-4xl mb-3">😢</div>
-        <h2 className="text-lg font-bold font-nunito mb-1" style={{ color: theme.text }}>Delete {friend.name}?</h2>
+        <div className="flex justify-center mb-3">
+          <PixelCharacter characterId={getCharacterId(friend)} state="sad" size={40} isDark={theme.isDark} />
+        </div>
+        <h2 id="delete-modal-title" className="text-lg font-bold font-nunito mb-1" style={{ color: theme.text }}>Delete {friend.name}?</h2>
         <p className="text-sm font-nunito" style={{ color: theme.textSecondary }}>This will remove all meeting history too.</p>
       </div>
       <div className="flex gap-3">
-        <button onClick={onClose} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm" style={{ backgroundColor: theme.border, color: theme.text }}>Cancel</button>
-        <button onClick={onConfirm} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm text-white" style={{ backgroundColor: COLORS.attention }}>Delete</button>
+        <button onClick={onClose} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm hover:opacity-80 transition-opacity focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ backgroundColor: theme.inputBg, color: theme.text }}>Cancel</button>
+        <button onClick={onConfirm} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm text-white hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ backgroundColor: COLORS.attention }}>Delete</button>
       </div>
     </div>
   </>
@@ -1178,8 +1170,8 @@ const DeleteConfirmModal = ({ friend, onClose, onConfirm, theme }: { friend: Fri
 const ImportConfirmModal = ({ data, onClose, onConfirm, theme }: { data: DataExport; onClose: () => void; onConfirm: () => void; theme: Theme }) => (
   <>
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={onClose} />
-    <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-2xl p-5 max-w-sm mx-auto animate-scale-in" style={{ backgroundColor: theme.card }}>
-      <h2 className="text-lg font-bold font-nunito mb-3" style={{ color: theme.text }}>Import Data?</h2>
+    <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-3xl p-5 max-w-sm mx-auto animate-scale-in" role="dialog" aria-modal="true" aria-labelledby="import-modal-title" style={{ backgroundColor: theme.card }}>
+      <h2 id="import-modal-title" className="text-lg font-bold font-nunito mb-3" style={{ color: theme.text }}>Import Data?</h2>
       <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: theme.inputBg }}>
         <div className="text-sm space-y-1 font-nunito" style={{ color: theme.text }}>
           <p><span className="font-semibold">{data.friends.length}</span> friends</p>
@@ -1188,8 +1180,8 @@ const ImportConfirmModal = ({ data, onClose, onConfirm, theme }: { data: DataExp
       </div>
       <p className="text-xs mb-4 font-nunito" style={{ color: COLORS.approaching }}>This will replace all current data.</p>
       <div className="flex gap-3">
-        <button onClick={onClose} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm" style={{ backgroundColor: theme.border, color: theme.text }}>Cancel</button>
-        <button onClick={onConfirm} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm text-white" style={{ backgroundColor: COLORS.primary }}>Import</button>
+        <button onClick={onClose} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm hover:opacity-80 transition-opacity focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ backgroundColor: theme.inputBg, color: theme.text }}>Cancel</button>
+        <button onClick={onConfirm} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm text-white hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ backgroundColor: COLORS.primary }}>Import</button>
       </div>
     </div>
   </>
@@ -1199,15 +1191,20 @@ const ImportConfirmModal = ({ data, onClose, onConfirm, theme }: { data: DataExp
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('home');
+  const previousScreenRef = useRef<Screen>('home');
   const [currentModal, setCurrentModal] = useState<Modal>(null);
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [importData, setImportData] = useState<DataExport | null>(null);
-  const [quickLogFriendId, setQuickLogFriendId] = useState<string | null>(null);
   const [historyLimit, setHistoryLimit] = useState(10);
 
   // Reset history pagination when switching friends
   useEffect(() => { setHistoryLimit(10); }, [selectedFriendId]);
+
+  // Track previous screen for animation direction
+  useEffect(() => {
+    return () => { previousScreenRef.current = currentScreen; };
+  }, [currentScreen]);
 
   const [appState, setAppState] = useState<AppState>(() => {
     const saved = localStorage.getItem('in-time-data');
@@ -1217,7 +1214,7 @@ export default function App() {
     return {
       friends: [],
       meetings: [],
-      settings: { theme: 'auto', notificationsEnabled: true, dailySummaryInterval: 30, thresholdAlertsEnabled: true, hasCompletedOnboarding: false }
+      settings: { theme: 'auto', hasCompletedOnboarding: false }
     };
   });
 
@@ -1230,7 +1227,7 @@ export default function App() {
 
   useEffect(() => {
     try { localStorage.setItem('in-time-data', JSON.stringify(appState)); }
-    catch { /* storage full or unavailable — state persists in memory only */ }
+    catch { /* storage full or unavailable â€” state persists in memory only */ }
   }, [appState]);
 
   const showToast = useCallback((message: string, type: Toast['type'] = 'success', action?: Toast['action']) => {
@@ -1286,7 +1283,7 @@ export default function App() {
     setAppState({
       friends: [],
       meetings: [],
-      settings: { theme: appState.settings.theme, notificationsEnabled: true, dailySummaryInterval: 30, thresholdAlertsEnabled: true, hasCompletedOnboarding: true }
+      settings: { theme: appState.settings.theme, hasCompletedOnboarding: true }
     });
     setCurrentModal(null); setCurrentScreen('home'); setSelectedFriendId(null);
     showToast('All data cleared');
@@ -1312,17 +1309,12 @@ export default function App() {
   };
 
   const handleQuickLogRequest = (friendId: string) => {
-    setQuickLogFriendId(friendId);
-    setCurrentModal('quick-log-confirm');
-  };
-
-  const handleQuickLogWithoutNote = () => {
-    if (!quickLogFriendId) return;
-    const friend = appState.friends.find(f => f.id === quickLogFriendId);
+    const friend = appState.friends.find(f => f.id === friendId);
     if (!friend) return;
 
     const now = Date.now();
-    const newMeeting: Meeting = { id: generateId(), friendId: quickLogFriendId, timestamp: now, createdAt: now };
+    const meetingId = generateId();
+    const newMeeting: Meeting = { id: meetingId, friendId, timestamp: now, createdAt: now };
     const daysSinceLastMeeting = friend.lastMeetingDate ? Math.floor((now - friend.lastMeetingDate) / 86400000) : 0;
     const newStreak = daysSinceLastMeeting <= friend.cadenceDays && friend.lastMeetingDate ? friend.streakCount + 1 : 1;
     const newMultiplier = Math.min(3.0, 1.0 + (newStreak * 0.1));
@@ -1330,23 +1322,23 @@ export default function App() {
     setAppState(prev => ({
       ...prev,
       meetings: [...prev.meetings, newMeeting],
-      friends: prev.friends.map(f => f.id === quickLogFriendId ? {
+      friends: prev.friends.map(f => f.id === friendId ? {
         ...f, lastMeetingDate: now, streakCount: newStreak, multiplier: newMultiplier, totalMeetings: f.totalMeetings + 1, updatedAt: now
       } : f)
     }));
 
-    setCurrentModal(null);
-    setQuickLogFriendId(null);
-    showToast(`Logged with ${friend.name}!${newStreak > 1 ? ` 🔥 ${newStreak} streak` : ''}`);
+    showToast(
+      `Logged with ${friend.name}${newStreak > 1 ? ` ${newStreak} streak` : ''}`,
+      'success',
+      {
+        label: 'Add note',
+        onAction: () => {
+          setSelectedFriendId(friendId);
+          setCurrentModal('log-meeting');
+        }
+      }
+    );
   };
-
-  const handleQuickLogWithNote = () => {
-    if (!quickLogFriendId) return;
-    setSelectedFriendId(quickLogFriendId);
-    setCurrentModal('log-meeting');
-    setQuickLogFriendId(null);
-  };
-
   const handleLogMeeting = (note?: string) => {
     if (!selectedFriendId) return;
     const friend = appState.friends.find(f => f.id === selectedFriendId);
@@ -1389,7 +1381,6 @@ export default function App() {
   };
 
   const selectedFriend = selectedFriendId ? appState.friends.find(f => f.id === selectedFriendId) : null;
-  const quickLogFriend = quickLogFriendId ? appState.friends.find(f => f.id === quickLogFriendId) : null;
   const activeFriendCount = appState.friends.filter(f => !f.isArchived).length;
   const activeFriends = appState.friends.filter(f => !f.isArchived).sort((a, b) => getDaysUntilDue(a.lastMeetingDate, a.cadenceDays) - getDaysUntilDue(b.lastMeetingDate, b.cadenceDays));
   const overallHealth = activeFriends.length > 0 ? Math.round(activeFriends.reduce((sum, f) => sum + calculateHealthScore(f, appState.meetings), 0) / activeFriends.length) : 0;
@@ -1405,7 +1396,7 @@ export default function App() {
 
       {/* HOME SCREEN */}
       {currentScreen === 'home' && (
-        <div className="flex-1 overflow-auto pb-20 animate-screen-enter">
+        <div className={`flex-1 overflow-auto pb-20 ${previousScreenRef.current === 'friend-detail' ? 'animate-screen-slide-back' : 'animate-screen-enter'}`}>
           <ScreenHeader
             isDark={isDark}
             theme={theme}
@@ -1421,26 +1412,13 @@ export default function App() {
                     {getGreeting(activeFriendCount, friendsNeedingAttention).subtitle}
                   </p>
                 </div>
-                {activeFriendCount > 0 && (
-                  <div className="relative w-10 h-10 flex-shrink-0">
-                    <svg className="w-full h-full transform -rotate-90">
-                      <circle cx="20" cy="20" r="16" stroke={theme.border} strokeWidth="3" fill="none" />
-                      <circle cx="20" cy="20" r="16" stroke={COLORS.primary} strokeWidth="3" fill="none"
-                        strokeLinecap="round"
-                        strokeDasharray={`${overallHealth * 1.005} 100.5`}
-                        className="transition-all duration-700" />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-xs font-bold tabular-nums font-nunito" style={{ color: COLORS.primary }}>{overallHealth}</span>
-                    </div>
-                  </div>
-                )}
               </div>
             }
             rightAction={
               <button onClick={() => setCurrentModal('add-friend')} disabled={activeFriendCount >= 10}
-                className="w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-50 transition-all active:scale-95"
-                style={{ backgroundColor: COLORS.primary }}>
+                className="w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-50 transition-all active:scale-95 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
+                style={{ backgroundColor: COLORS.primary }}
+                aria-label="Add friend">
                 <Plus className="w-5 h-5 text-white" />
               </button>
             }
@@ -1449,14 +1427,14 @@ export default function App() {
           <div className={`${TOKENS.spacing.screenPadding}`}>
             {activeFriendCount === 0 ? (
               <Card theme={theme} className="text-center py-12 mt-4">
-                <div className="text-5xl mb-4 animate-float">⏳</div>
+                <div className="mb-4 animate-float flex justify-center"><AppIcon size={56} withBackground={false} isDark={isDark} /></div>
                 <h2 className="text-lg font-bold mb-2 font-nunito" style={{ color: theme.text }}>No connections yet</h2>
                 <p className="text-sm max-w-[240px] mx-auto font-nunito leading-relaxed" style={{ color: theme.textMuted }}>
                   Add up to 10 people you want to stay connected with. We'll help you keep track.
                 </p>
                 <button
                   onClick={() => setCurrentModal('add-friend')}
-                  className="mt-5 px-6 py-2.5 rounded-xl text-white text-sm font-semibold font-nunito inline-flex items-center gap-2 transition-all active:scale-95"
+                  className="mt-5 px-6 py-2.5 rounded-xl text-white text-sm font-semibold font-nunito inline-flex items-center gap-2 transition-all active:scale-95 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
                   style={{ backgroundColor: COLORS.primary }}
                 >
                   <Plus className="w-4 h-4" />Add First Friend
@@ -1533,16 +1511,16 @@ export default function App() {
             theme={theme}
             title={selectedFriend.name}
             leftAction={
-              <button onClick={() => { setCurrentScreen('home'); setSelectedFriendId(null); }} className="p-2 -ml-2 rounded-full transition-colors" style={{ color: theme.text }}>
+              <button onClick={() => { setCurrentScreen('home'); setSelectedFriendId(null); }} className="p-2 -ml-2 rounded-full transition-colors hover:opacity-75 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ color: theme.text }} aria-label="Go back">
                 <ChevronLeft className="w-5 h-5" />
               </button>
             }
             rightAction={
-              <div className="flex items-center gap-1">
-                <button onClick={() => setCurrentModal('edit-friend')} className="p-2 rounded-full transition-colors" style={{ color: theme.textMuted }}>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setCurrentModal('edit-friend')} className="p-2 rounded-full transition-colors hover:opacity-75 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ color: theme.textMuted }} aria-label={`Edit ${selectedFriend.name}`}>
                   <Edit3 className="w-4 h-4" />
                 </button>
-                <button onClick={() => setCurrentModal('delete-confirm')} className="p-2 -mr-2 rounded-full transition-colors" style={{ color: theme.textMuted }}>
+                <button onClick={() => setCurrentModal('delete-confirm')} className="p-2 -mr-2 rounded-full transition-colors hover:opacity-75 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ color: theme.textMuted }} aria-label={`Delete ${selectedFriend.name}`}>
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -1588,8 +1566,8 @@ export default function App() {
                 const friendMeetings = appState.meetings.filter(m => m.friendId === selectedFriend.id).sort((a, b) => b.timestamp - a.timestamp);
                 return friendMeetings.length === 0 ? (
                   <Card theme={theme} className="text-center py-8">
-                    <div className="text-3xl mb-2">⏳</div>
-                    <div className="text-sm font-nunito" style={{ color: theme.textMuted }}>You haven't connected yet — start the clock.</div>
+                    <div className="mb-2 flex justify-center"><AppIcon size={36} withBackground={false} isDark={isDark} /></div>
+                    <div className="text-sm font-nunito" style={{ color: theme.textMuted }}>You haven't connected yet â€” start the clock.</div>
                   </Card>
                 ) : (
                   <div className="space-y-2">
@@ -1619,7 +1597,7 @@ export default function App() {
                     })}
                     {friendMeetings.length > historyLimit && (
                       <button onClick={() => setHistoryLimit(prev => prev + 10)}
-                        className="w-full py-2.5 text-sm font-medium font-nunito rounded-xl transition-colors"
+                        className="w-full py-2.5 text-sm font-medium font-nunito rounded-xl transition-colors hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
                         style={{ color: COLORS.primary, backgroundColor: `${COLORS.primary}10` }}>
                         Show more ({friendMeetings.length - historyLimit} remaining)
                       </button>
@@ -1632,7 +1610,7 @@ export default function App() {
 
           <div className="fixed bottom-20 left-0 right-0 p-4 safe-area-bottom" style={{ background: isDark ? `linear-gradient(to top, ${COLORS.darkBg} 70%, transparent)` : `linear-gradient(to top, ${COLORS.lightBg} 70%, transparent)` }}>
             <button onClick={() => setCurrentModal('log-meeting')}
-              className="w-full h-12 text-white rounded-xl font-semibold font-nunito flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm"
+              className="w-full h-12 text-white rounded-xl font-semibold font-nunito flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
               style={{ backgroundColor: COLORS.primary }}>
               <Check className="w-4 h-4" />Log connection
             </button>
@@ -1649,7 +1627,7 @@ export default function App() {
 
             {activeFriends.length === 0 ? (
               <Card theme={theme} className="text-center py-12">
-                <div className="text-4xl mb-3">📊</div>
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: `${COLORS.primary}20` }}><BarChart3 className="w-7 h-7" style={{ color: COLORS.primary }} /></div>
                 <h2 className="text-base font-bold font-nunito mb-1" style={{ color: theme.text }}>No data yet</h2>
                 <p className="text-sm font-nunito" style={{ color: theme.textMuted }}>Add friends and log meetings to see insights.</p>
               </Card>
@@ -1658,7 +1636,7 @@ export default function App() {
               const allMeetings = appState.meetings;
               const now = Date.now();
 
-              // Weekly activity — last 4 weeks
+              // Weekly activity â€” last 4 weeks
               const weeklyData: { label: string; count: number }[] = [];
               for (let i = 3; i >= 0; i--) {
                 const weekStart = now - (i + 1) * 7 * 86400000;
@@ -1714,7 +1692,7 @@ export default function App() {
                 <>
                   {/* Overall Health Ring */}
                   <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
-                    <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>How you're doing</h2>
+                    <h2 className="text-xs font-semibold mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>How you're doing</h2>
                     <div className="flex items-center justify-center mb-3">
                       <div className="relative w-28 h-28">
                         <svg className="transform -rotate-90 w-28 h-28">
@@ -1768,7 +1746,7 @@ export default function App() {
 
                   {/* Weekly Activity Chart */}
                   <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
-                    <h2 className="text-xs font-medium mb-4 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>This month</h2>
+                    <h2 className="text-xs font-semibold mb-4 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>This month</h2>
                     <div className="flex items-end gap-1.5" style={{ height: 80 }}>
                       {weeklyData.map((week, i) => {
                         const height = maxWeekly > 0 ? Math.max(4, (week.count / maxWeekly) * 72) : 4;
@@ -1839,7 +1817,7 @@ export default function App() {
                   {/* Streak Leaderboard */}
                   {streakBoard.length > 0 && (
                     <Card theme={theme} className={`p-5 ${TOKENS.spacing.sectionGap}`}>
-                      <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Streak Leaderboard</h2>
+                      <h2 className="text-xs font-semibold mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Streak Leaderboard</h2>
                       <div className="space-y-2.5">
                         {streakBoard.map((friend, i) => (
                           <div key={friend.id} className="flex items-center gap-3">
@@ -1862,7 +1840,7 @@ export default function App() {
 
                   {/* Individual Scores with Trends */}
                   <Card theme={theme} className="p-5">
-                    <h2 className="text-xs font-medium mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Your circle</h2>
+                    <h2 className="text-xs font-semibold mb-3 font-nunito uppercase tracking-wide" style={{ color: theme.textMuted }}>Your circle</h2>
                     <div className="space-y-3">
                       {withScores.sort((a, b) => b.score - a.score).map(({ friend, score }) => {
                         const trend = getTrend(friend);
@@ -1902,11 +1880,11 @@ export default function App() {
           <div className={`${TOKENS.spacing.screenPadding}`}>
             <Card theme={theme} className={`overflow-hidden ${TOKENS.spacing.cardGap}`}>
               <div className="px-4 py-3">
-                <div className="text-xs font-medium uppercase tracking-wide font-nunito mb-3" style={{ color: theme.textMuted }}>Appearance</div>
+                <div className="text-xs font-semibold uppercase tracking-wide font-nunito mb-3" style={{ color: theme.textMuted }}>Appearance</div>
                 <div className="flex gap-1.5 p-1 rounded-xl" style={{ backgroundColor: theme.inputBg }}>
                   {(['auto', 'light', 'dark'] as const).map((opt) => (
                     <button key={opt} onClick={() => setAppState(prev => ({ ...prev, settings: { ...prev.settings, theme: opt } }))}
-                      className="flex-1 py-2 rounded-lg font-semibold font-nunito capitalize text-sm transition-all"
+                      className="flex-1 py-2 rounded-lg font-semibold font-nunito capitalize text-sm transition-all hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
                       style={{
                         backgroundColor: appState.settings.theme === opt ? COLORS.primary : 'transparent',
                         color: appState.settings.theme === opt ? 'white' : theme.textSecondary,
@@ -1920,9 +1898,9 @@ export default function App() {
 
             <Card theme={theme} className={`overflow-hidden ${TOKENS.spacing.cardGap}`}>
               <div className="px-4 py-2.5" style={{ borderBottom: `1px solid ${theme.border}` }}>
-                <h3 className="text-xs font-medium uppercase tracking-wide font-nunito" style={{ color: theme.textMuted }}>Data</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide font-nunito" style={{ color: theme.textMuted }}>Data</h3>
               </div>
-              <button onClick={handleExport} className="w-full px-4 py-3 flex items-center gap-3 transition-colors text-left" style={{ borderBottom: `1px solid ${theme.border}` }}>
+              <button onClick={handleExport} className="w-full px-4 py-3 flex items-center gap-3 transition-colors text-left hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ borderBottom: `1px solid ${theme.border}` }}>
                 <Download className="w-4 h-4 flex-shrink-0" style={{ color: COLORS.primary }} />
                 <div>
                   <div className="text-sm font-nunito" style={{ color: theme.text }}>Export</div>
@@ -1939,11 +1917,11 @@ export default function App() {
               </label>
             </Card>
 
-            <Card theme={theme} className={`overflow-hidden ${TOKENS.spacing.cardGap}`} style={{ borderColor: `${COLORS.attention}30` }}>
+            <Card theme={theme} className={`overflow-hidden ${TOKENS.spacing.cardGap}`} style={{ borderColor: `${COLORS.attention}40` }}>
               <div className="px-4 py-2.5" style={{ borderBottom: `1px solid ${theme.border}` }}>
-                <h3 className="text-xs font-medium uppercase tracking-wide font-nunito" style={{ color: COLORS.attention }}>Danger zone</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide font-nunito" style={{ color: COLORS.attention }}>Danger zone</h3>
               </div>
-              <button onClick={() => setCurrentModal('reset-confirm')} className="w-full px-4 py-3 flex items-center gap-3 transition-colors text-left">
+              <button onClick={() => setCurrentModal('reset-confirm')} className="w-full px-4 py-3 flex items-center gap-3 transition-colors text-left hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2">
                 <Trash2 className="w-4 h-4 flex-shrink-0" style={{ color: COLORS.attention }} />
                 <div>
                   <div className="text-sm font-nunito" style={{ color: COLORS.attention }}>Reset all data</div>
@@ -1967,10 +1945,20 @@ export default function App() {
 
       {/* BOTTOM NAVIGATION */}
       <div className="fixed bottom-0 left-0 right-0 safe-area-bottom" style={{ backgroundColor: theme.card, borderTop: `1px solid ${theme.border}` }}>
-        <div className="flex justify-around py-1.5">
+        <div className="flex justify-around py-2" role="navigation" aria-label="Main navigation">
           {[{ screen: 'home' as const, icon: Home, label: 'Home' }, { screen: 'insights' as const, icon: BarChart3, label: 'Insights' }, { screen: 'settings' as const, icon: Settings, label: 'Settings' }].map(({ screen, icon: Icon, label }) => (
-            <button key={screen} onClick={() => setCurrentScreen(screen)} className="flex flex-col items-center gap-0.5 px-5 py-1.5 rounded-lg transition-all relative">
-              <Icon className="w-5 h-5" style={{ color: currentScreen === screen ? COLORS.primary : theme.textMuted }} />
+            <button
+              key={screen}
+              onClick={() => setCurrentScreen(screen)}
+              className="flex flex-col items-center gap-0.5 px-5 py-1.5 rounded-lg transition-all relative hover:opacity-75 focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2"
+              aria-current={currentScreen === screen ? 'page' : undefined}
+            >
+              <div className="relative">
+                <Icon className="w-5 h-5" style={{ color: currentScreen === screen ? COLORS.primary : theme.textMuted }} />
+                {screen === 'home' && friendsNeedingAttention > 0 && currentScreen !== 'home' && (
+                  <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2" style={{ backgroundColor: COLORS.primary, borderColor: theme.card }} />
+                )}
+              </div>
               <span className="text-xs font-medium font-nunito" style={{ color: currentScreen === screen ? COLORS.primary : theme.textMuted }}>{label}</span>
               {currentScreen === screen && (
                 <div className="absolute -bottom-0.5 w-5 h-0.5 rounded-full" style={{ backgroundColor: COLORS.primary }} />
@@ -1986,29 +1974,20 @@ export default function App() {
       {currentModal === 'log-meeting' && selectedFriend && <LogMeetingModal friend={selectedFriend} onClose={() => setCurrentModal(null)} onSave={handleLogMeeting} theme={theme} />}
       {currentModal === 'delete-confirm' && selectedFriend && <DeleteConfirmModal friend={selectedFriend} onClose={() => setCurrentModal(null)} onConfirm={handleDeleteFriend} theme={theme} />}
       {currentModal === 'import-confirm' && importData && <ImportConfirmModal data={importData} onClose={() => { setImportData(null); setCurrentModal(null); }} onConfirm={confirmImport} theme={theme} />}
-      {currentModal === 'quick-log-confirm' && quickLogFriend && (
-        <QuickLogConfirmModal
-          friend={quickLogFriend}
-          onClose={() => { setCurrentModal(null); setQuickLogFriendId(null); }}
-          onConfirmWithNote={handleQuickLogWithNote}
-          onConfirmWithoutNote={handleQuickLogWithoutNote}
-          theme={theme}
-        />
-      )}
       {currentModal === 'reset-confirm' && (
         <>
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={() => setCurrentModal(null)} />
-          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-2xl p-5 max-w-sm mx-auto animate-scale-in" style={{ backgroundColor: theme.card }}>
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-3xl p-5 max-w-sm mx-auto animate-scale-in" role="dialog" aria-modal="true" aria-labelledby="reset-modal-title" style={{ backgroundColor: theme.card }}>
             <div className="text-center mb-5">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: `${COLORS.attention}15` }}>
+              <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: `${COLORS.attention}20` }}>
                 <AlertTriangle className="w-6 h-6" style={{ color: COLORS.attention }} />
               </div>
-              <h2 className="text-lg font-bold font-nunito mb-1" style={{ color: theme.text }}>Reset everything?</h2>
+              <h2 id="reset-modal-title" className="text-lg font-bold font-nunito mb-1" style={{ color: theme.text }}>Reset everything?</h2>
               <p className="text-sm font-nunito" style={{ color: theme.textSecondary }}>This will permanently delete all friends, meetings, and settings. This cannot be undone.</p>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setCurrentModal(null)} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm" style={{ backgroundColor: theme.border, color: theme.text }}>Cancel</button>
-              <button onClick={handleResetData} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm text-white" style={{ backgroundColor: COLORS.attention }}>Reset</button>
+              <button onClick={() => setCurrentModal(null)} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm hover:opacity-80 transition-opacity focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ backgroundColor: theme.inputBg, color: theme.text }}>Cancel</button>
+              <button onClick={handleResetData} className="flex-1 py-3 rounded-xl font-semibold font-nunito text-sm text-white hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-[#26A69A] focus-visible:ring-offset-2" style={{ backgroundColor: COLORS.attention }}>Reset</button>
             </div>
           </div>
         </>
@@ -2026,24 +2005,33 @@ export default function App() {
         @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
         @keyframes screen-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes screen-slide-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes screen-slide-back { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
         .animate-slide-down { animation: slide-down 0.25s ease-out; }
         .animate-slide-up { animation: slide-up 0.3s ease-out; }
         .animate-scale-in { animation: scale-in 0.2s ease-out; }
         .animate-float { animation: float 3s ease-in-out infinite; }
         .animate-screen-enter { animation: screen-enter 0.25s ease-out; }
         .animate-screen-slide { animation: screen-slide-in 0.25s ease-out; }
+        .animate-screen-slide-back { animation: screen-slide-back 0.25s ease-out; }
         @keyframes pixel-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
         @keyframes pixel-sway { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
         @keyframes pixel-sleep { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.97); } }
         @keyframes pixel-zzz { 0% { opacity: 0; transform: translateY(0); } 50% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
         @keyframes pixel-sparkle { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
-        .pixel-char-bounce { animation: pixel-bounce 1.8s ease-in-out infinite; }
-        .pixel-char-sway { animation: pixel-sway 2.5s ease-in-out infinite; }
-        .pixel-char-sleep { animation: pixel-sleep 3s ease-in-out infinite; }
-        .pixel-zzz-1 { animation: pixel-zzz 2s ease-in-out infinite; }
-        .pixel-zzz-2 { animation: pixel-zzz 2s ease-in-out 0.6s infinite; }
-        .pixel-sparkle-1 { animation: pixel-sparkle 1.5s ease-in-out infinite; }
-        .pixel-sparkle-2 { animation: pixel-sparkle 1.5s ease-in-out 0.4s infinite; }
+        @media (prefers-reduced-motion: no-preference) {
+          .pixel-char-bounce { animation: pixel-bounce 1.8s ease-in-out infinite; }
+          .pixel-char-sway { animation: pixel-sway 2.5s ease-in-out infinite; }
+          .pixel-char-sleep { animation: pixel-sleep 3s ease-in-out infinite; }
+          .pixel-zzz-1 { animation: pixel-zzz 2s ease-in-out infinite; }
+          .pixel-zzz-2 { animation: pixel-zzz 2s ease-in-out 0.6s infinite; }
+          .pixel-sparkle-1 { animation: pixel-sparkle 1.5s ease-in-out infinite; }
+          .pixel-sparkle-2 { animation: pixel-sparkle 1.5s ease-in-out 0.4s infinite; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-slide-down, .animate-slide-up, .animate-scale-in,
+          .animate-screen-enter, .animate-screen-slide, .animate-screen-slide-back { animation: none; }
+          .animate-float { animation: none; }
+        }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
         html, body, #root { min-height: 100vh; min-height: 100dvh; margin: 0; padding: 0; }
